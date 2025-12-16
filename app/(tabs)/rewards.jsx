@@ -44,7 +44,7 @@ export default function RewardsScreen() {
                     {nextLevel && (
                         <View style={styles.progressContainer}>
                             <View style={styles.progressBar}>
-                                <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: tintColor }]} />
+                                <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: '#2563eb' }]} />
                             </View>
                             <Text style={styles.progressText}>
                                 {nextLevel.points - user.points} points to Level {nextLevel.level}

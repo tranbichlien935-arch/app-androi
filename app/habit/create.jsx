@@ -3,7 +3,6 @@ import { ThemedView } from '@/components/themed-view';
 import { FrequencySelector } from '@/components/ui/FrequencySelector';
 import { useHabits } from '@/contexts/HabitContext';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { Frequency } from '@/types/habit';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -16,9 +15,9 @@ export default function CreateHabitScreen() {
     const textColor = useThemeColor({}, 'text');
 
     const [name, setName] = useState('');
-    const [frequency, setFrequency] = useState<Frequency>('daily');
-    const [selectedDays, setSelectedDays] = useState<number[]>([]);
-    const [reminderTime, setReminderTime] = useState<string | undefined>();
+    const [frequency, setFrequency] = useState('daily');
+    const [selectedDays, setSelectedDays] = useState([]);
+    const [reminderTime, setReminderTime] = useState();
     const [showTimePicker, setShowTimePicker] = useState(false);
     const [tempTime, setTempTime] = useState(new Date());
 
@@ -49,7 +48,7 @@ export default function CreateHabitScreen() {
         }
     };
 
-    const handleTimeChange = (event: any, selectedDate?: Date) => {
+    const handleTimeChange = (event, selectedDate) => {
         if (Platform.OS === 'android') {
             setShowTimePicker(false);
         }
@@ -104,7 +103,7 @@ export default function CreateHabitScreen() {
                 </View>
 
                 <TouchableOpacity
-                    style={[styles.saveButton, { backgroundColor: tintColor }]}
+                    style={[styles.saveButton, { backgroundColor: '#2563eb' }]}
                     onPress={handleSave}
                 >
                     <ThemedText style={styles.saveButtonText}>Create Habit</ThemedText>

@@ -1,4 +1,4 @@
-import { STORAGE_KEYS } from '@/types/habit.js';
+import { STORAGE_KEYS } from '@/types/habit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**

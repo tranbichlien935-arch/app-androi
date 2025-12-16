@@ -42,7 +42,7 @@ function RootLayoutNav() {
         <Stack.Screen
           name="habit/create"
           options={{
-            presentation: 'modal',
+            presentation: 'card',
             title: 'New Habit',
             headerShown: true,
           }}

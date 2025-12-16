@@ -119,8 +119,15 @@ export default function HomeScreen() {
 
       {/* Floating Action Button */}
       <TouchableOpacity
-        style={[styles.fab, { backgroundColor: tintColor }]}
-        onPress={() => router.push('/habit/create')}
+        style={[styles.fab, { backgroundColor: '#2563eb' }]}
+        onPress={() => {
+          console.log('FAB pressed! Navigating to /habit/create');
+          try {
+            router.navigate('/habit/create');
+          } catch (error) {
+            console.error('Navigation error:', error);
+          }
+        }}
       >
         <Feather name="plus" size={28} color="#fff" />
       </TouchableOpacity>
@@ -192,5 +199,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+    zIndex: 999,
   },
 });

@@ -1,5 +1,4 @@
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { Habit } from '@/types/habit';
 import { formatTime } from '@/utils/dateHelpers';
 import { getHabitStats, isCompletedToday } from '@/utils/habitHelpers';
 import { Feather } from '@expo/vector-icons';
@@ -45,7 +44,7 @@ export const HabitCard = ({ habit, onToggle, onPress }) => {
                     onPress={handleToggle}
                     style={[
                         styles.checkbox,
-                        isCompleted && { backgroundColor: tintColor, borderColor: tintColor },
+                        isCompleted && { backgroundColor: '#2563eb', borderColor: '#2563eb' },
                     ]}
                 >
                     <Animated.View style={animatedCheckStyle}>

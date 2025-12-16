@@ -1,6 +1,5 @@
 import { DAYS_OF_WEEK } from '@/constants/habits';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { Frequency } from '@/types/habit';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -13,7 +12,7 @@ export const FrequencySelector = ({
     const tintColor = useThemeColor({}, 'tint');
     const textColor = useThemeColor({}, 'text');
 
-    const toggleDay = (dayValue: number) => {
+    const toggleDay = (dayValue) => {
         if (selectedDays.includes(dayValue)) {
             onDaysChange(selectedDays.filter(d => d !== dayValue));
         } else {
@@ -29,7 +28,7 @@ export const FrequencySelector = ({
                 <TouchableOpacity
                     style={[
                         styles.frequencyButton,
-                        frequency === 'daily' && { backgroundColor: tintColor },
+                        frequency === 'daily' && { backgroundColor: '#2563eb' },
                     ]}
                     onPress={() => onFrequencyChange('daily')}
                 >
@@ -44,7 +43,7 @@ export const FrequencySelector = ({
                 <TouchableOpacity
                     style={[
                         styles.frequencyButton,
-                        frequency === 'weekly' && { backgroundColor: tintColor },
+                        frequency === 'weekly' && { backgroundColor: '#2563eb' },
                     ]}
                     onPress={() => onFrequencyChange('weekly')}
                 >
@@ -68,7 +67,7 @@ export const FrequencySelector = ({
                                     key={day.value}
                                     style={[
                                         styles.dayButton,
-                                        isSelected && { backgroundColor: tintColor },
+                                        isSelected && { backgroundColor: '#2563eb' },
                                     ]}
                                     onPress={() => toggleDay(day.value)}
                                 >

@@ -1,5 +1,4 @@
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { Habit } from '@/types/habit';
 import React from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
 import { BarChart } from 'react-native-chart-kit';
