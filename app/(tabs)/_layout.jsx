@@ -1,40 +1,60 @@
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Colors } from '@/constants/Colors';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: Colors.purple[600],
+        tabBarInactiveTintColor: Colors.slate[400],
         headerShown: true,
         tabBarButton: HapticTab,
+        tabBarStyle: {
+          backgroundColor: Colors.white,
+          borderTopWidth: 1,
+          borderTopColor: Colors.slate[200],
+          paddingBottom: 8,
+          paddingTop: 8,
+          height: 64,
+        },
+        headerStyle: {
+          backgroundColor: Colors.white,
+        },
+        headerTintColor: Colors.slate[900],
+        headerTitleStyle: {
+          fontWeight: '600',
+        },
       }}>
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <Feather name="home" size={24} color={color} />,
+          title: 'Trang chủ',
+          tabBarIcon: ({ color }) => <Ionicons name="home" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Statistics',
-          tabBarIcon: ({ color }) => <Feather name="trending-up" size={24} color={color} />,
+          title: 'Thống kê',
+          tabBarIcon: ({ color }) => <Ionicons name="stats-chart" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="rewards"
         options={{
-          title: 'Rewards',
-          tabBarIcon: ({ color }) => <Feather name="award" size={24} color={color} />,
+          title: 'Phần thưởng',
+          tabBarIcon: ({ color }) => <Ionicons name="trophy" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Hồ sơ',
+          tabBarIcon: ({ color }) => <Ionicons name="person" size={24} color={color} />,
         }}
       />
     </Tabs>
