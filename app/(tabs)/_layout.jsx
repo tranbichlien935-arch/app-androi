@@ -37,17 +37,31 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="activity"
         options={{
-          title: 'Thống kê',
-          tabBarIcon: ({ color }) => <Ionicons name="stats-chart" size={24} color={color} />,
+          title: 'Hoạt động',
+          tabBarIcon: ({ color }) => <Ionicons name="fitness" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="rewards"
+        name="water"
         options={{
-          title: 'Phần thưởng',
-          tabBarIcon: ({ color }) => <Ionicons name="trophy" size={24} color={color} />,
+          title: 'Nước',
+          tabBarIcon: ({ color }) => <Ionicons name="water" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="sleep"
+        options={{
+          title: 'Giấc ngủ',
+          tabBarIcon: ({ color }) => <Ionicons name="moon" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="weight"
+        options={{
+          title: 'Cân nặng',
+          tabBarIcon: ({ color }) => <Ionicons name="scale" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
