@@ -3,7 +3,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
     Alert,
     ScrollView,
@@ -23,7 +24,6 @@ export default function WeightScreen() {
     const [bmi, setBmi] = useState(0);
     const [newWeight, setNewWeight] = useState('');
     const [editingSettings, setEditingSettings] = useState(false);
-    const [tempHeight, setTempHeight] = useState('');
     const [tempTarget, setTempTarget] = useState('');
     const [tempStart, setTempStart] = useState('');
     const [loading, setLoading] = useState(true);
@@ -36,19 +36,38 @@ export default function WeightScreen() {
         }
     }, [authLoading, isAuthenticated]);
 
+    // Reload data when tab becomes focused
+    useFocusEffect(
+        useCallback(() => {
+            if (!authLoading && isAuthenticated) {
+                loadWeightData();
+            }
+        }, [authLoading, isAuthenticated])
+    );
+
     const loadWeightData = async () => {
         try {
-            // Load settings
+            // Load user profile for height
+            const profile = await firebaseApi.getUserProfile();
+            setHeight(profile.height || 170);
+
+            // Load settings for weight goals
             const settings = await firebaseApi.getUserSettings();
             setTargetWeight(settings.target_weight || 65);
             setStartWeight(settings.start_weight || 70);
-            setHeight(settings.height || 170);
 
             // Load latest weight
             const weightLogs = await firebaseApi.getWeightLogs(1);
-            if (weightLogs.length > 0) {
+            console.log('Weight logs loaded:', weightLogs);
+
+            if (weightLogs && weightLogs.length > 0) {
+                console.log('Setting current weight:', weightLogs[0].weight);
                 setCurrentWeight(weightLogs[0].weight);
                 setBmi(weightLogs[0].bmi || 0);
+            } else {
+                console.log('No weight logs found, setting to 0');
+                setCurrentWeight(0);
+                setBmi(0);
             }
         } catch (error) {
             console.error('Error loading weight data:', error);
@@ -59,65 +78,92 @@ export default function WeightScreen() {
 
     const saveWeight = async () => {
         const weight = parseFloat(newWeight);
-        if (!weight || weight <= 0) {
+
+        if (!weight || weight <= 0 || isNaN(weight)) {
             Alert.alert('Lỗi', 'Vui lòng nhập cân nặng hợp lệ');
             return;
         }
 
         try {
             const today = firebaseApi.getTodayDate();
-            const result = await firebaseApi.addWeightLog({
+
+            await firebaseApi.addWeightLog({
                 date: today,
                 weight: weight,
             });
 
-            setCurrentWeight(weight);
-            setBmi(result.bmi || 0);
             setNewWeight('');
-            loadWeightData(); // Reload to update progress
-            Alert.alert('Thành công', 'Đã lưu cân nặng');
+            Alert.alert('Thành công', `Đã lưu cân nặng: ${weight}kg`);
+
+            // Reload all data to get fresh values
+            await loadWeightData();
         } catch (error) {
-            Alert.alert('Lỗi', 'Không thể lưu cân nặng');
+            console.error('Error saving weight:', error);
+            Alert.alert('Lỗi', `Không thể lưu cân nặng: ${error.message}`);
         }
     };
 
     const saveSettings = async () => {
-        const heightVal = parseFloat(tempHeight);
         const targetVal = parseFloat(tempTarget);
         const startVal = parseFloat(tempStart);
 
-        if (!heightVal || heightVal <= 0) {
-            Alert.alert('Lỗi', 'Vui lòng nhập chiều cao hợp lệ');
+        if (!targetVal || targetVal <= 0 || isNaN(targetVal)) {
             return;
         }
-        if (!targetVal || targetVal <= 0) {
-            Alert.alert('Lỗi', 'Vui lòng nhập cân nặng mục tiêu hợp lệ');
-            return;
-        }
-        if (!startVal || startVal <= 0) {
-            Alert.alert('Lỗi', 'Vui lòng nhập cân nặng ban đầu hợp lệ');
+        if (!startVal || startVal <= 0 || isNaN(startVal)) {
             return;
         }
 
         try {
+            // Update weight goals only
             await firebaseApi.updateUserSettings({
-                height: heightVal,
                 target_weight: targetVal,
                 start_weight: startVal,
             });
 
-            setHeight(heightVal);
             setTargetWeight(targetVal);
             setStartWeight(startVal);
             setEditingSettings(false);
-            loadWeightData(); // Reload to recalculate BMI
-            Alert.alert('Thành công', 'Đã cập nhật cài đặt');
+            await loadWeightData(); // Reload to recalculate progress
         } catch (error) {
-            Alert.alert('Lỗi', 'Không thể lưu cài đặt');
+            console.error('Error saving settings:', error);
         }
     };
 
-    const progress = startWeight > 0 ? ((startWeight - currentWeight) / (startWeight - targetWeight) * 100) : 0;
+    // Calculate progress properly
+    const getProgress = () => {
+        if (!startWeight || !targetWeight || !currentWeight) return 0;
+
+        const totalChange = Math.abs(targetWeight - startWeight);
+        if (totalChange === 0) return 100; // Already at target
+
+        const currentChange = Math.abs(currentWeight - startWeight);
+        const progress = (currentChange / totalChange) * 100;
+
+        return Math.min(Math.max(progress, 0), 100); // Clamp between 0-100
+    };
+
+    // Calculate weight change from start
+    const getWeightChange = () => {
+        if (!startWeight || !currentWeight) return { value: 0, text: '0.0kg', isGaining: false };
+
+        const change = currentWeight - startWeight;
+        const isGaining = change > 0;
+        const text = `${isGaining ? '+' : ''}${change.toFixed(1)}kg`;
+
+        return { value: change, text, isGaining };
+    };
+
+    // Calculate BMI locally as backup
+    const calculateBMI = () => {
+        if (!height || !currentWeight || height <= 0) return 0;
+        const heightInMeters = height / 100;
+        return currentWeight / (heightInMeters * heightInMeters);
+    };
+
+    const progress = getProgress();
+    const weightChange = getWeightChange();
+    const displayBMI = bmi > 0 ? bmi : calculateBMI();
 
     return (
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -133,9 +179,31 @@ export default function WeightScreen() {
                 </View>
 
                 <View style={styles.weightDisplay}>
-                    <Text style={styles.weightValue}>{currentWeight}</Text>
+                    <Text style={styles.weightValue}>
+                        {(() => {
+                            console.log('Rendering currentWeight:', currentWeight);
+                            return currentWeight || 0;
+                        })()}
+                    </Text>
                     <Text style={styles.weightUnit}>kg</Text>
                 </View>
+
+                {/* Weight Change Indicator */}
+                {currentWeight > 0 && startWeight > 0 && (
+                    <View style={styles.weightChangeContainer}>
+                        <Ionicons
+                            name={weightChange.isGaining ? "trending-up" : "trending-down"}
+                            size={16}
+                            color={weightChange.isGaining ? "#fbbf24" : "#10b981"}
+                        />
+                        <Text style={[
+                            styles.weightChangeText,
+                            { color: weightChange.isGaining ? "#fbbf24" : "#10b981" }
+                        ]}>
+                            {weightChange.text} từ khi bắt đầu
+                        </Text>
+                    </View>
+                )}
 
                 <View style={styles.progressSection}>
                     <View style={styles.progressHeader}>
@@ -153,10 +221,16 @@ export default function WeightScreen() {
 
                 <View style={styles.bmiCard}>
                     <Text style={styles.bmiLabel}>BMI</Text>
-                    <Text style={styles.bmiValue}>{bmi.toFixed(1)}</Text>
-                    <Text style={styles.bmiStatus}>
-                        {bmi < 18.5 ? 'Thiếu cân' : bmi < 25 ? 'Bình thường' : bmi < 30 ? 'Thừa cân' : 'Béo phì'}
+                    <Text style={styles.bmiValue}>
+                        {displayBMI > 0 ? displayBMI.toFixed(1) : 'N/A'}
                     </Text>
+                    {displayBMI > 0 ? (
+                        <Text style={styles.bmiStatus}>
+                            {displayBMI < 18.5 ? 'Thiếu cân' : displayBMI < 25 ? 'Bình thường' : displayBMI < 30 ? 'Thừa cân' : 'Béo phì'}
+                        </Text>
+                    ) : (
+                        <Text style={styles.bmiStatus}>Chưa có chiều cao</Text>
+                    )}
                 </View>
             </LinearGradient>
 
@@ -168,7 +242,6 @@ export default function WeightScreen() {
                         if (editingSettings) {
                             setEditingSettings(false);
                         } else {
-                            setTempHeight(height.toString());
                             setTempTarget(targetWeight.toString());
                             setTempStart(startWeight.toString());
                             setEditingSettings(true);
@@ -184,17 +257,6 @@ export default function WeightScreen() {
 
                 {editingSettings ? (
                     <View style={styles.settingsForm}>
-                        <View style={styles.settingItem}>
-                            <Text style={styles.settingLabel}>Chiều cao (cm)</Text>
-                            <TextInput
-                                style={styles.settingInput}
-                                value={tempHeight}
-                                onChangeText={setTempHeight}
-                                placeholder="170"
-                                keyboardType="decimal-pad"
-                                placeholderTextColor={Colors.gray[400]}
-                            />
-                        </View>
                         <View style={styles.settingItem}>
                             <Text style={styles.settingLabel}>Cân nặng ban đầu (kg)</Text>
                             <TextInput
@@ -232,7 +294,12 @@ export default function WeightScreen() {
                     <View style={styles.settingsDisplay}>
                         <View style={styles.settingRow}>
                             <Text style={styles.settingDisplayLabel}>Chiều cao:</Text>
-                            <Text style={styles.settingDisplayValue}>{height} cm</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <Text style={styles.settingDisplayValue}>{height} cm</Text>
+                                <Text style={[styles.settingDisplayLabel, { fontSize: 12, fontStyle: 'italic' }]}>
+                                    (Sửa ở Profile)
+                                </Text>
+                            </View>
                         </View>
                         <View style={styles.settingRow}>
                             <Text style={styles.settingDisplayLabel}>Cân nặng ban đầu:</Text>
@@ -327,6 +394,18 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: 'rgba(255,255,255,0.9)',
         marginLeft: 8,
+    },
+    weightChangeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        marginBottom: 12,
+    },
+    weightChangeText: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: Colors.white,
     },
     progressSection: {
         marginBottom: 20,

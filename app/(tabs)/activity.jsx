@@ -3,7 +3,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
     Alert,
     Dimensions,
@@ -46,6 +47,15 @@ export default function ActivityScreen() {
             setLoading(false);
         }
     }, [authLoading, isAuthenticated]);
+
+    // Reload data when tab becomes focused
+    useFocusEffect(
+        useCallback(() => {
+            if (!authLoading && isAuthenticated) {
+                loadActivityData();
+            }
+        }, [authLoading, isAuthenticated])
+    );
 
     const loadActivityData = async () => {
         try {

@@ -359,7 +359,8 @@ class FirebaseApiService {
 
         try {
             const weightRef = collection(db, 'users', userId, 'weight_logs');
-            const q = query(weightRef, orderBy('date', 'desc'), firestoreLimit(limitCount));
+            // Sort by created_at to get the most recent entry first
+            const q = query(weightRef, orderBy('created_at', 'desc'), firestoreLimit(limitCount));
             const snapshot = await getDocs(q);
             return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         } catch (error) {

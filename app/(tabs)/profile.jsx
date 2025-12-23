@@ -3,8 +3,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
     Alert,
     ScrollView,
@@ -46,6 +46,7 @@ export default function ProfileScreen() {
     const [achievements, setAchievements] = useState([]);
     const [tempName, setTempName] = useState('');
     const [tempAge, setTempAge] = useState('');
+    const [tempHeight, setTempHeight] = useState('');
     const [tempGender, setTempGender] = useState('');
 
     useEffect(() => {
@@ -58,6 +59,18 @@ export default function ProfileScreen() {
             setLoading(false);
         }
     }, [authLoading, isAuthenticated]);
+
+    // Reload data when tab becomes focused
+    useFocusEffect(
+        useCallback(() => {
+            if (!authLoading && isAuthenticated) {
+                loadUserProfile();
+                loadStats();
+                loadMonthlyStats();
+                loadAchievements();
+            }
+        }, [authLoading, isAuthenticated])
+    );
 
     const loadUserProfile = async () => {
         try {
@@ -172,6 +185,7 @@ export default function ProfileScreen() {
     const saveUserProfile = async () => {
         const name = tempName.trim();
         const age = parseInt(tempAge);
+        const height = parseInt(tempHeight);
 
         if (!name) {
             Alert.alert('Lỗi', 'Vui lòng nhập tên');
@@ -181,22 +195,34 @@ export default function ProfileScreen() {
             Alert.alert('Lỗi', 'Vui lòng nhập tuổi hợp lệ (1-150)');
             return;
         }
+        if (!height || height <= 0 || height > 300) {
+            Alert.alert('Lỗi', 'Vui lòng nhập chiều cao hợp lệ (1-300cm)');
+            return;
+        }
         if (!tempGender) {
             Alert.alert('Lỗi', 'Vui lòng chọn giới tính');
             return;
         }
 
         try {
+            // Update user profile (including height for BMI calculation)
             await firebaseApi.updateUserProfile({
                 full_name: name,
                 age: age,
+                height: height,
                 gender: tempGender
+            });
+
+            // Also update height in settings (for weight screen goals)
+            await firebaseApi.updateUserSettings({
+                height: height
             });
 
             setUserInfo(prev => ({
                 ...prev,
                 name: name,
                 age: age,
+                height: height,
                 gender: tempGender
             }));
 
@@ -241,6 +267,7 @@ export default function ProfileScreen() {
                             } else {
                                 setTempName(userInfo.name);
                                 setTempAge(userInfo.age.toString());
+                                setTempHeight(userInfo.height.toString());
                                 setTempGender(userInfo.gender);
                                 setEditMode(true);
                             }
@@ -278,33 +305,44 @@ export default function ProfileScreen() {
                                     />
                                 </View>
                                 <View style={[styles.editField, { flex: 1 }]}>
-                                    <Text style={styles.editLabel}>Giới tính</Text>
-                                    <View style={styles.genderButtons}>
-                                        <TouchableOpacity
-                                            style={[
-                                                styles.genderButton,
-                                                tempGender === 'Nam' && styles.genderButtonActive
-                                            ]}
-                                            onPress={() => setTempGender('Nam')}
-                                        >
-                                            <Text style={[
-                                                styles.genderButtonText,
-                                                tempGender === 'Nam' && styles.genderButtonTextActive
-                                            ]}>Nam</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={[
-                                                styles.genderButton,
-                                                tempGender === 'Nữ' && styles.genderButtonActive
-                                            ]}
-                                            onPress={() => setTempGender('Nữ')}
-                                        >
-                                            <Text style={[
-                                                styles.genderButtonText,
-                                                tempGender === 'Nữ' && styles.genderButtonTextActive
-                                            ]}>Nữ</Text>
-                                        </TouchableOpacity>
-                                    </View>
+                                    <Text style={styles.editLabel}>Chiều cao (cm)</Text>
+                                    <TextInput
+                                        style={styles.editInput}
+                                        value={tempHeight}
+                                        onChangeText={setTempHeight}
+                                        placeholder="Chiều cao"
+                                        keyboardType="number-pad"
+                                        placeholderTextColor="rgba(255,255,255,0.5)"
+                                    />
+                                </View>
+                            </View>
+                            <View style={styles.editField}>
+                                <Text style={styles.editLabel}>Giới tính</Text>
+                                <View style={styles.genderButtons}>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.genderButton,
+                                            tempGender === 'Nam' && styles.genderButtonActive
+                                        ]}
+                                        onPress={() => setTempGender('Nam')}
+                                    >
+                                        <Text style={[
+                                            styles.genderButtonText,
+                                            tempGender === 'Nam' && styles.genderButtonTextActive
+                                        ]}>Nam</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.genderButton,
+                                            tempGender === 'Nữ' && styles.genderButtonActive
+                                        ]}
+                                        onPress={() => setTempGender('Nữ')}
+                                    >
+                                        <Text style={[
+                                            styles.genderButtonText,
+                                            tempGender === 'Nữ' && styles.genderButtonTextActive
+                                        ]}>Nữ</Text>
+                                    </TouchableOpacity>
                                 </View>
                             </View>
                             <TouchableOpacity onPress={saveUserProfile} style={styles.saveButton}>
@@ -527,7 +565,7 @@ export default function ProfileScreen() {
                     <Text style={styles.logoutText}>Đăng xuất</Text>
                 </LinearGradient>
             </TouchableOpacity>
-        </ScrollView>
+        </ScrollView >
     );
 }
 
