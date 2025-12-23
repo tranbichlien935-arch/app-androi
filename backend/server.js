@@ -11,16 +11,22 @@ app.use(express.json());
 
 // Routes
 const authRoutes = require('./routes/auth');
-const habitsRoutes = require('./routes/habits');
-const statsRoutes = require('./routes/stats');
+const activitiesRoutes = require('./routes/activities');
+const waterRoutes = require('./routes/water');
+const sleepRoutes = require('./routes/sleep');
+const weightRoutes = require('./routes/weight');
+const settingsRoutes = require('./routes/settings');
 
 app.use('/auth', authRoutes);
-app.use('/habits', habitsRoutes);
-app.use('/stats', statsRoutes);
+app.use('/activities', activitiesRoutes);
+app.use('/water', waterRoutes);
+app.use('/sleep', sleepRoutes);
+app.use('/weight', weightRoutes);
+app.use('/settings', settingsRoutes);
 
 // Health check
 app.get('/', (req, res) => {
-    res.json({ message: 'Habit Tracker API đang chạy! 🚀' });
+    res.json({ message: 'Health Tracker API đang chạy! 🚀' });
 });
 
 // Start server
