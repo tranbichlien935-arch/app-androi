@@ -35,7 +35,7 @@ export default function SignInScreen() {
             // Navigate to main app after successful login
             router.replace('/(tabs)');
         } catch (error) {
-            Alert.alert('Đăng nhập thất bại', error.message);
+            Alert.alert('Đăng nhập thất bại', error.message || 'Vui lòng kiểm tra lại email và mật khẩu');
         } finally {
             setIsLoading(false);
         }

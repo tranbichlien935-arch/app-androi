@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/Colors';
+import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,6 +16,7 @@ import {
 
 export default function ProfileScreen() {
     const router = useRouter();
+    const { logout, isAuthenticated, loading: authLoading } = useAuth();
     const [editMode, setEditMode] = useState(false);
     const [userInfo, setUserInfo] = useState({
         name: 'Đang tải...',
@@ -26,8 +28,10 @@ export default function ProfileScreen() {
     });
 
     useEffect(() => {
-        loadUserProfile();
-    }, []);
+        if (!authLoading && isAuthenticated) {
+            loadUserProfile();
+        }
+    }, [authLoading, isAuthenticated]);
 
     const loadUserProfile = async () => {
         try {
@@ -58,10 +62,14 @@ export default function ProfileScreen() {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await firebaseApi.logout();
-                            // AuthContext will auto-redirect to /sign-in
+                            console.log('Starting logout...');
+                            await logout();
+                            console.log('Logout successful');
+                            // Manual redirect as backup
+                            router.replace('/sign-in');
                         } catch (error) {
-                            Alert.alert('Lỗi', 'Không thể đăng xuất');
+                            console.error('Logout error:', error);
+                            Alert.alert('Lỗi', error.message || 'Không thể đăng xuất');
                         }
                     },
                 },

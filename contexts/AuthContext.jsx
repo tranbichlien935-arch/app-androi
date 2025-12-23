@@ -27,10 +27,41 @@ export const AuthProvider = ({ children }) => {
         return unsubscribe;
     }, []);
 
+    // Authentication methods
+    const login = async (email, password) => {
+        try {
+            const result = await firebaseApi.login(email, password);
+            return result.success;
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    const signup = async (email, password, fullName) => {
+        try {
+            const result = await firebaseApi.register(email, password, { fullName });
+            return result.success;
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    const logout = async () => {
+        try {
+            await firebaseApi.logout();
+            return true;
+        } catch (error) {
+            throw error;
+        }
+    };
+
     const value = {
         user,
         isAuthenticated,
         loading,
+        login,
+        signup,
+        logout,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/Colors';
+import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,6 +15,7 @@ import {
 } from 'react-native';
 
 export default function WeightScreen() {
+    const { isAuthenticated, loading: authLoading } = useAuth();
     const [currentWeight, setCurrentWeight] = useState(0);
     const [targetWeight, setTargetWeight] = useState(65);
     const [startWeight, setStartWeight] = useState(70);
@@ -22,8 +24,12 @@ export default function WeightScreen() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        loadWeightData();
-    }, []);
+        if (!authLoading && isAuthenticated) {
+            loadWeightData();
+        } else if (!authLoading && !isAuthenticated) {
+            setLoading(false);
+        }
+    }, [authLoading, isAuthenticated]);
 
     const loadWeightData = async () => {
         try {

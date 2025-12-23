@@ -223,9 +223,12 @@ class FirebaseApiService {
             const waterRef = collection(db, 'users', userId, 'water_logs');
 
             if (date) {
-                const q = query(waterRef, where('date', '==', date), orderBy('time', 'asc'));
+                // Query by date only, sort on client-side to avoid composite index requirement
+                const q = query(waterRef, where('date', '==', date));
                 const snapshot = await getDocs(q);
-                const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const logs = snapshot.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .sort((a, b) => (a.time || '').localeCompare(b.time || '')); // Client-side sort
                 const total = logs.reduce((sum, log) => sum + log.amount, 0);
                 return { logs, total };
             } else {
@@ -234,6 +237,7 @@ class FirebaseApiService {
                 return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             }
         } catch (error) {
+            console.error('Error in getWaterLogs:', error);
             throw new Error('Lỗi khi lấy nhật ký nước');
         }
     }

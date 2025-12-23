@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/Colors';
+import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,6 +13,7 @@ import {
 } from 'react-native';
 
 export default function HomeScreen() {
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [todayStats, setTodayStats] = useState({
     steps: 0,
@@ -25,8 +27,12 @@ export default function HomeScreen() {
   const [userName, setUserName] = useState('Bạn');
 
   useEffect(() => {
-    loadTodayData();
-  }, []);
+    if (!authLoading && isAuthenticated) {
+      loadTodayData();
+    } else if (!authLoading && !isAuthenticated) {
+      setLoading(false);
+    }
+  }, [authLoading, isAuthenticated]);
 
   const loadTodayData = async () => {
     try {

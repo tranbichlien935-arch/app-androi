@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/Colors';
+import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,6 +19,7 @@ import { BarChart } from 'react-native-chart-kit';
 const screenWidth = Dimensions.get('window').width;
 
 export default function ActivityScreen() {
+    const { isAuthenticated, loading: authLoading } = useAuth();
     const [showAddActivity, setShowAddActivity] = useState(false);
     const [loading, setLoading] = useState(true);
     const [todayTotal, setTodayTotal] = useState({
@@ -38,8 +40,12 @@ export default function ActivityScreen() {
     });
 
     useEffect(() => {
-        loadActivityData();
-    }, []);
+        if (!authLoading && isAuthenticated) {
+            loadActivityData();
+        } else if (!authLoading && !isAuthenticated) {
+            setLoading(false);
+        }
+    }, [authLoading, isAuthenticated]);
 
     const loadActivityData = async () => {
         try {

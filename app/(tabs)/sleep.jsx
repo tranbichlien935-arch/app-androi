@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/Colors';
+import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,6 +15,7 @@ import {
 } from 'react-native';
 
 export default function SleepScreen() {
+    const { isAuthenticated, loading: authLoading } = useAuth();
     const [bedTime, setBedTime] = useState('23:00');
     const [wakeTime, setWakeTime] = useState('07:00');
     const [totalHours, setTotalHours] = useState(0);
@@ -21,8 +23,12 @@ export default function SleepScreen() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        loadSleepData();
-    }, []);
+        if (!authLoading && isAuthenticated) {
+            loadSleepData();
+        } else if (!authLoading && !isAuthenticated) {
+            setLoading(false);
+        }
+    }, [authLoading, isAuthenticated]);
 
     const loadSleepData = async () => {
         try {

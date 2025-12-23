@@ -38,6 +38,11 @@ export default function SignUpScreen() {
             return;
         }
 
+        if (password.length < 6) {
+            Alert.alert('Lỗi', 'Mật khẩu phải có ít nhất 6 ký tự');
+            return;
+        }
+
         if (!acceptTerms) {
             Alert.alert('Lỗi', 'Vui lòng đồng ý với điều khoản sử dụng');
             return;
@@ -46,10 +51,13 @@ export default function SignUpScreen() {
         setIsLoading(true);
         try {
             await firebaseApi.register(email, password, { fullName });
-            // Navigate to main app after successful registration
-            router.replace('/(tabs)');
+            Alert.alert(
+                'Đăng ký thành công',
+                'Tài khoản của bạn đã được tạo!',
+                [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
+            );
         } catch (error) {
-            Alert.alert('Đăng ký thất bại', error.message);
+            Alert.alert('Đăng ký thất bại', error.message || 'Vui lòng thử lại sau');
         } finally {
             setIsLoading(false);
         }

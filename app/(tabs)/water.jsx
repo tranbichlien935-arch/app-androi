@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/Colors';
+import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,14 +14,19 @@ import {
 } from 'react-native';
 
 export default function WaterScreen() {
+    const { isAuthenticated, loading: authLoading } = useAuth();
     const [waterIntake, setWaterIntake] = useState(0);
     const [dailyGoal, setDailyGoal] = useState(2000);
     const [glassSize, setGlassSize] = useState(200);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        loadWaterData();
-    }, []);
+        if (!authLoading && isAuthenticated) {
+            loadWaterData();
+        } else if (!authLoading && !isAuthenticated) {
+            setLoading(false);
+        }
+    }, [authLoading, isAuthenticated]);
 
     const loadWaterData = async () => {
         try {
