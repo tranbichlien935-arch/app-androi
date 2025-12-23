@@ -19,8 +19,13 @@ export default function WeightScreen() {
     const [currentWeight, setCurrentWeight] = useState(0);
     const [targetWeight, setTargetWeight] = useState(65);
     const [startWeight, setStartWeight] = useState(70);
+    const [height, setHeight] = useState(170);
     const [bmi, setBmi] = useState(0);
     const [newWeight, setNewWeight] = useState('');
+    const [editingSettings, setEditingSettings] = useState(false);
+    const [tempHeight, setTempHeight] = useState('');
+    const [tempTarget, setTempTarget] = useState('');
+    const [tempStart, setTempStart] = useState('');
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -37,6 +42,7 @@ export default function WeightScreen() {
             const settings = await firebaseApi.getUserSettings();
             setTargetWeight(settings.target_weight || 65);
             setStartWeight(settings.start_weight || 70);
+            setHeight(settings.height || 170);
 
             // Load latest weight
             const weightLogs = await firebaseApi.getWeightLogs(1);
@@ -68,9 +74,46 @@ export default function WeightScreen() {
             setCurrentWeight(weight);
             setBmi(result.bmi || 0);
             setNewWeight('');
+            loadWeightData(); // Reload to update progress
             Alert.alert('Thành công', 'Đã lưu cân nặng');
         } catch (error) {
             Alert.alert('Lỗi', 'Không thể lưu cân nặng');
+        }
+    };
+
+    const saveSettings = async () => {
+        const heightVal = parseFloat(tempHeight);
+        const targetVal = parseFloat(tempTarget);
+        const startVal = parseFloat(tempStart);
+
+        if (!heightVal || heightVal <= 0) {
+            Alert.alert('Lỗi', 'Vui lòng nhập chiều cao hợp lệ');
+            return;
+        }
+        if (!targetVal || targetVal <= 0) {
+            Alert.alert('Lỗi', 'Vui lòng nhập cân nặng mục tiêu hợp lệ');
+            return;
+        }
+        if (!startVal || startVal <= 0) {
+            Alert.alert('Lỗi', 'Vui lòng nhập cân nặng ban đầu hợp lệ');
+            return;
+        }
+
+        try {
+            await firebaseApi.updateUserSettings({
+                height: heightVal,
+                target_weight: targetVal,
+                start_weight: startVal,
+            });
+
+            setHeight(heightVal);
+            setTargetWeight(targetVal);
+            setStartWeight(startVal);
+            setEditingSettings(false);
+            loadWeightData(); // Reload to recalculate BMI
+            Alert.alert('Thành công', 'Đã cập nhật cài đặt');
+        } catch (error) {
+            Alert.alert('Lỗi', 'Không thể lưu cài đặt');
         }
     };
 
@@ -116,6 +159,92 @@ export default function WeightScreen() {
                     </Text>
                 </View>
             </LinearGradient>
+
+            {/* Settings Card */}
+            <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                    <Text style={styles.cardTitle}>Cài đặt mục tiêu</Text>
+                    <TouchableOpacity onPress={() => {
+                        if (editingSettings) {
+                            setEditingSettings(false);
+                        } else {
+                            setTempHeight(height.toString());
+                            setTempTarget(targetWeight.toString());
+                            setTempStart(startWeight.toString());
+                            setEditingSettings(true);
+                        }
+                    }}>
+                        <Ionicons
+                            name={editingSettings ? "close" : "create-outline"}
+                            size={24}
+                            color={Colors.green[600]}
+                        />
+                    </TouchableOpacity>
+                </View>
+
+                {editingSettings ? (
+                    <View style={styles.settingsForm}>
+                        <View style={styles.settingItem}>
+                            <Text style={styles.settingLabel}>Chiều cao (cm)</Text>
+                            <TextInput
+                                style={styles.settingInput}
+                                value={tempHeight}
+                                onChangeText={setTempHeight}
+                                placeholder="170"
+                                keyboardType="decimal-pad"
+                                placeholderTextColor={Colors.gray[400]}
+                            />
+                        </View>
+                        <View style={styles.settingItem}>
+                            <Text style={styles.settingLabel}>Cân nặng ban đầu (kg)</Text>
+                            <TextInput
+                                style={styles.settingInput}
+                                value={tempStart}
+                                onChangeText={setTempStart}
+                                placeholder="70"
+                                keyboardType="decimal-pad"
+                                placeholderTextColor={Colors.gray[400]}
+                            />
+                        </View>
+                        <View style={styles.settingItem}>
+                            <Text style={styles.settingLabel}>Cân nặng mục tiêu (kg)</Text>
+                            <TextInput
+                                style={styles.settingInput}
+                                value={tempTarget}
+                                onChangeText={setTempTarget}
+                                placeholder="65"
+                                keyboardType="decimal-pad"
+                                placeholderTextColor={Colors.gray[400]}
+                            />
+                        </View>
+                        <TouchableOpacity onPress={saveSettings} style={styles.saveSettingsButton}>
+                            <LinearGradient
+                                colors={Colors.gradient.green}
+                                style={styles.saveSettingsGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                            >
+                                <Text style={styles.saveSettingsText}>Lưu cài đặt</Text>
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <View style={styles.settingsDisplay}>
+                        <View style={styles.settingRow}>
+                            <Text style={styles.settingDisplayLabel}>Chiều cao:</Text>
+                            <Text style={styles.settingDisplayValue}>{height} cm</Text>
+                        </View>
+                        <View style={styles.settingRow}>
+                            <Text style={styles.settingDisplayLabel}>Cân nặng ban đầu:</Text>
+                            <Text style={styles.settingDisplayValue}>{startWeight} kg</Text>
+                        </View>
+                        <View style={styles.settingRow}>
+                            <Text style={styles.settingDisplayLabel}>Cân nặng mục tiêu:</Text>
+                            <Text style={styles.settingDisplayValue}>{targetWeight} kg</Text>
+                        </View>
+                    </View>
+                )}
+            </View>
 
             {/* Add Weight */}
             <View style={styles.card}>
@@ -318,5 +447,64 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: Colors.gray[700],
         lineHeight: 22,
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    settingsForm: {
+        gap: 16,
+    },
+    settingItem: {
+        gap: 8,
+    },
+    settingLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: Colors.gray[700],
+    },
+    settingInput: {
+        height: 48,
+        backgroundColor: Colors.gray[100],
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        fontSize: 16,
+        color: Colors.gray[900],
+    },
+    saveSettingsButton: {
+        height: 48,
+        borderRadius: 12,
+        overflow: 'hidden',
+        marginTop: 8,
+    },
+    saveSettingsGradient: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    saveSettingsText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: Colors.white,
+    },
+    settingsDisplay: {
+        gap: 12,
+    },
+    settingRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 8,
+    },
+    settingDisplayLabel: {
+        fontSize: 14,
+        color: Colors.gray[600],
+    },
+    settingDisplayValue: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: Colors.gray[900],
     },
 });

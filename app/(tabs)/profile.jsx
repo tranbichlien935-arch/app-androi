@@ -10,6 +10,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
@@ -26,10 +27,35 @@ export default function ProfileScreen() {
         gender: '',
         joinDate: '',
     });
+    const [stats, setStats] = useState({
+        consecutiveDays: 0,
+        achievementsCount: 0,
+        weightLost: 0
+    });
+    const [monthlyStats, setMonthlyStats] = useState({
+        totalSteps: 0,
+        avgSteps: 0,
+        totalCalories: 0,
+        avgCalories: 0,
+        totalWater: 0,
+        avgWater: 0,
+        totalSleep: 0,
+        avgSleep: 0
+    });
+    const [loading, setLoading] = useState(true);
+    const [achievements, setAchievements] = useState([]);
+    const [tempName, setTempName] = useState('');
+    const [tempAge, setTempAge] = useState('');
+    const [tempGender, setTempGender] = useState('');
 
     useEffect(() => {
         if (!authLoading && isAuthenticated) {
             loadUserProfile();
+            loadStats();
+            loadMonthlyStats();
+            loadAchievements();
+        } else if (!authLoading && !isAuthenticated) {
+            setLoading(false);
         }
     }, [authLoading, isAuthenticated]);
 
@@ -48,6 +74,72 @@ export default function ProfileScreen() {
             }
         } catch (error) {
             console.error('Error loading profile:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const loadStats = async () => {
+        try {
+            const consecutive = await firebaseApi.getConsecutiveDays();
+            const weightProgress = await firebaseApi.getWeightProgress();
+
+            setStats({
+                consecutiveDays: consecutive,
+                achievementsCount: 0, // Will implement later
+                weightLost: Math.abs(weightProgress.lost)
+            });
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    };
+
+    const loadMonthlyStats = async () => {
+        try {
+            const monthly = await firebaseApi.getMonthlyStats();
+            setMonthlyStats(monthly);
+        } catch (error) {
+            console.error('Error loading monthly stats:', error);
+        }
+    };
+
+    const loadAchievements = async () => {
+        try {
+            // Get all achievements
+            const allAchievements = await firebaseApi.getAchievements();
+
+            // Get user's unlocked achievements
+            const userAchievements = await firebaseApi.getUserAchievements();
+            const unlockedIds = new Set(userAchievements.map(a => a.achievement_id));
+
+            // Merge data
+            const merged = allAchievements.map(achievement => ({
+                ...achievement,
+                unlocked: unlockedIds.has(achievement.id),
+                unlockedAt: userAchievements.find(u => u.achievement_id === achievement.id)?.unlocked_at
+            }));
+
+            setAchievements(merged);
+
+            // Update achievements count in stats
+            setStats(prev => ({
+                ...prev,
+                achievementsCount: userAchievements.length
+            }));
+
+            // Check for new achievements
+            const newlyUnlocked = await firebaseApi.checkAndUnlockAchievements();
+            if (newlyUnlocked.length > 0) {
+                Alert.alert(
+                    '🏆 Thành tích mới!',
+                    `Bạn vừa mở khóa: ${newlyUnlocked.map(a => a.title).join(', ')}`,
+                    [{ text: 'Tuyệt vời!' }]
+                );
+                // Reload achievements to show newly unlocked ones
+                loadAchievements();
+            }
+        } catch (error) {
+            console.error('Error loading achievements:', error);
         }
     };
 
@@ -77,12 +169,44 @@ export default function ProfileScreen() {
         );
     };
 
-    const achievements = [
-        { icon: '🏆', title: 'Người kiên trì', desc: 'Đạt mục tiêu 30 ngày liên tiếp' },
-        { icon: '⭐', title: 'Ngôi sao giảm cân', desc: 'Giảm được 5kg' },
-        { icon: '💧', title: 'Chuyên gia hydrat', desc: 'Uống đủ nước 7 ngày' },
-        { icon: '🌙', title: 'Bậc thầy giấc ngủ', desc: 'Ngủ đủ giác 14 ngày' },
-    ];
+    const saveUserProfile = async () => {
+        const name = tempName.trim();
+        const age = parseInt(tempAge);
+
+        if (!name) {
+            Alert.alert('Lỗi', 'Vui lòng nhập tên');
+            return;
+        }
+        if (!age || age <= 0 || age > 150) {
+            Alert.alert('Lỗi', 'Vui lòng nhập tuổi hợp lệ (1-150)');
+            return;
+        }
+        if (!tempGender) {
+            Alert.alert('Lỗi', 'Vui lòng chọn giới tính');
+            return;
+        }
+
+        try {
+            await firebaseApi.updateUserProfile({
+                full_name: name,
+                age: age,
+                gender: tempGender
+            });
+
+            setUserInfo(prev => ({
+                ...prev,
+                name: name,
+                age: age,
+                gender: tempGender
+            }));
+
+            setEditMode(false);
+            Alert.alert('Thành công', 'Đã cập nhật thông tin');
+        } catch (error) {
+            console.error('Error saving profile:', error);
+            Alert.alert('Lỗi', 'Không thể lưu thông tin');
+        }
+    };
 
     const menuItems = [
         { icon: 'settings-outline', label: 'Cài đặt', color: Colors.gray[600], bg: Colors.gray[100] },
@@ -111,44 +235,120 @@ export default function ProfileScreen() {
                         </View>
                     </View>
                     <TouchableOpacity
-                        onPress={() => setEditMode(!editMode)}
+                        onPress={() => {
+                            if (editMode) {
+                                setEditMode(false);
+                            } else {
+                                setTempName(userInfo.name);
+                                setTempAge(userInfo.age.toString());
+                                setTempGender(userInfo.gender);
+                                setEditMode(true);
+                            }
+                        }}
                         style={styles.editButton}
                     >
-                        <Ionicons name="create-outline" size={20} color={Colors.white} />
+                        <Ionicons name={editMode ? "close" : "create-outline"} size={20} color={Colors.white} />
                     </TouchableOpacity>
                 </View>
 
                 <View style={styles.infoCard}>
                     <Text style={styles.infoLabel}>Thông tin cá nhân</Text>
-                    <View style={styles.infoGrid}>
-                        <View style={styles.infoItem}>
-                            <Text style={styles.infoValue}>{userInfo.age}</Text>
-                            <Text style={styles.infoUnit}>Tuổi</Text>
+                    {editMode ? (
+                        <View style={styles.editForm}>
+                            <View style={styles.editField}>
+                                <Text style={styles.editLabel}>Họ tên</Text>
+                                <TextInput
+                                    style={styles.editInput}
+                                    value={tempName}
+                                    onChangeText={setTempName}
+                                    placeholder="Nhập họ tên"
+                                    placeholderTextColor="rgba(255,255,255,0.5)"
+                                />
+                            </View>
+                            <View style={styles.editRow}>
+                                <View style={[styles.editField, { flex: 1 }]}>
+                                    <Text style={styles.editLabel}>Tuổi</Text>
+                                    <TextInput
+                                        style={styles.editInput}
+                                        value={tempAge}
+                                        onChangeText={setTempAge}
+                                        placeholder="Tuổi"
+                                        keyboardType="number-pad"
+                                        placeholderTextColor="rgba(255,255,255,0.5)"
+                                    />
+                                </View>
+                                <View style={[styles.editField, { flex: 1 }]}>
+                                    <Text style={styles.editLabel}>Giới tính</Text>
+                                    <View style={styles.genderButtons}>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.genderButton,
+                                                tempGender === 'Nam' && styles.genderButtonActive
+                                            ]}
+                                            onPress={() => setTempGender('Nam')}
+                                        >
+                                            <Text style={[
+                                                styles.genderButtonText,
+                                                tempGender === 'Nam' && styles.genderButtonTextActive
+                                            ]}>Nam</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.genderButton,
+                                                tempGender === 'Nữ' && styles.genderButtonActive
+                                            ]}
+                                            onPress={() => setTempGender('Nữ')}
+                                        >
+                                            <Text style={[
+                                                styles.genderButtonText,
+                                                tempGender === 'Nữ' && styles.genderButtonTextActive
+                                            ]}>Nữ</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            </View>
+                            <TouchableOpacity onPress={saveUserProfile} style={styles.saveButton}>
+                                <LinearGradient
+                                    colors={['#ec4899', '#9333ea']}
+                                    style={styles.saveButtonGradient}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                >
+                                    <Text style={styles.saveButtonText}>Lưu thông tin</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
                         </View>
-                        <View style={styles.infoItem}>
-                            <Text style={styles.infoValue}>{userInfo.height}</Text>
-                            <Text style={styles.infoUnit}>cm</Text>
+                    ) : (
+                        <View style={styles.infoGrid}>
+                            <View style={styles.infoItem}>
+                                <Text style={styles.infoValue}>{userInfo.age}</Text>
+                                <Text style={styles.infoUnit}>Tuổi</Text>
+                            </View>
+                            <View style={styles.infoItem}>
+                                <Text style={styles.infoValue}>{userInfo.height}</Text>
+                                <Text style={styles.infoUnit}>cm</Text>
+                            </View>
+                            <View style={styles.infoItem}>
+                                <Text style={styles.infoValue}>{userInfo.gender}</Text>
+                                <Text style={styles.infoUnit}>Giới tính</Text>
+                            </View>
                         </View>
-                        <View style={styles.infoItem}>
-                            <Text style={styles.infoValue}>{userInfo.gender}</Text>
-                            <Text style={styles.infoUnit}>Giới tính</Text>
-                        </View>
-                    </View>
+                    )}
                 </View>
             </LinearGradient>
 
             {/* Stats Summary */}
             <View style={styles.statsRow}>
                 <View style={styles.statBox}>
-                    <Text style={styles.statNumber}>52</Text>
+                    <Text style={styles.statNumber}>{stats.consecutiveDays}</Text>
                     <Text style={styles.statLabel}>Ngày liên tiếp</Text>
                 </View>
                 <View style={styles.statBox}>
-                    <Text style={styles.statNumber}>8</Text>
+                    <Text style={styles.statNumber}>{stats.achievementsCount}</Text>
                     <Text style={styles.statLabel}>Thành tích</Text>
                 </View>
                 <View style={styles.statBox}>
-                    <Text style={styles.statNumber}>2.5</Text>
+                    <Text style={styles.statNumber}>{stats.weightLost.toFixed(1)}</Text>
                     <Text style={styles.statLabel}>kg giảm</Text>
                 </View>
             </View>
@@ -158,10 +358,38 @@ export default function ProfileScreen() {
                 <Text style={styles.sectionTitle}>Thành tích đạt được</Text>
                 <View style={styles.achievementsGrid}>
                     {achievements.map((achievement, index) => (
-                        <View key={index} style={styles.achievementCard}>
-                            <Text style={styles.achievementIcon}>{achievement.icon}</Text>
-                            <Text style={styles.achievementTitle}>{achievement.title}</Text>
-                            <Text style={styles.achievementDesc}>{achievement.desc}</Text>
+                        <View
+                            key={achievement.id || index}
+                            style={[
+                                styles.achievementCard,
+                                !achievement.unlocked && styles.achievementCardLocked
+                            ]}
+                        >
+                            <View style={styles.achievementHeader}>
+                                <Text style={styles.achievementIcon}>{achievement.icon}</Text>
+                                {achievement.unlocked && (
+                                    <View style={styles.unlockedBadge}>
+                                        <Ionicons name="checkmark-circle" size={20} color={Colors.green[600]} />
+                                    </View>
+                                )}
+                                {!achievement.unlocked && (
+                                    <View style={styles.lockedBadge}>
+                                        <Ionicons name="lock-closed" size={16} color={Colors.gray[400]} />
+                                    </View>
+                                )}
+                            </View>
+                            <Text style={[
+                                styles.achievementTitle,
+                                !achievement.unlocked && styles.achievementTitleLocked
+                            ]}>
+                                {achievement.title}
+                            </Text>
+                            <Text style={[
+                                styles.achievementDesc,
+                                !achievement.unlocked && styles.achievementDescLocked
+                            ]}>
+                                {achievement.description}
+                            </Text>
                         </View>
                     ))}
                 </View>
@@ -187,8 +415,8 @@ export default function ProfileScreen() {
                             </View>
                         </View>
                         <View style={styles.activityRight}>
-                            <Text style={styles.activityValue}>245,680</Text>
-                            <Text style={styles.activityAvg}>8,189 bước</Text>
+                            <Text style={styles.activityValue}>{monthlyStats.totalSteps.toLocaleString()}</Text>
+                            <Text style={styles.activityAvg}>{monthlyStats.avgSteps.toLocaleString()} bước</Text>
                         </View>
                     </View>
 
@@ -208,8 +436,8 @@ export default function ProfileScreen() {
                             </View>
                         </View>
                         <View style={styles.activityRight}>
-                            <Text style={styles.activityValue}>9,840 kcal</Text>
-                            <Text style={styles.activityAvg}>328 kcal</Text>
+                            <Text style={styles.activityValue}>{monthlyStats.totalCalories.toLocaleString()} kcal</Text>
+                            <Text style={styles.activityAvg}>{monthlyStats.avgCalories.toLocaleString()} kcal</Text>
                         </View>
                     </View>
 
@@ -229,8 +457,8 @@ export default function ProfileScreen() {
                             </View>
                         </View>
                         <View style={styles.activityRight}>
-                            <Text style={styles.activityValue}>58 lít</Text>
-                            <Text style={styles.activityAvg}>1,933 ml</Text>
+                            <Text style={styles.activityValue}>{(monthlyStats.totalWater / 1000).toFixed(1)} lít</Text>
+                            <Text style={styles.activityAvg}>{monthlyStats.avgWater.toLocaleString()} ml</Text>
                         </View>
                     </View>
 
@@ -250,8 +478,8 @@ export default function ProfileScreen() {
                             </View>
                         </View>
                         <View style={styles.activityRight}>
-                            <Text style={styles.activityValue}>225 giờ</Text>
-                            <Text style={styles.activityAvg}>7.5 giờ</Text>
+                            <Text style={styles.activityValue}>{monthlyStats.totalSleep} giờ</Text>
+                            <Text style={styles.activityAvg}>{monthlyStats.avgSleep} giờ</Text>
                         </View>
                     </View>
                 </View>
@@ -382,6 +610,73 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: 'rgba(255,255,255,0.9)',
     },
+    editForm: {
+        gap: 16,
+    },
+    editRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    editField: {
+        gap: 8,
+    },
+    editLabel: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.9)',
+        fontWeight: '500',
+    },
+    editInput: {
+        height: 44,
+        backgroundColor: 'rgba(255,255,255,0.3)',
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        fontSize: 16,
+        color: Colors.white,
+        fontWeight: '500',
+    },
+    genderButtons: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    genderButton: {
+        flex: 1,
+        height: 44,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
+    },
+    genderButtonActive: {
+        backgroundColor: 'rgba(255,255,255,0.4)',
+        borderColor: Colors.white,
+    },
+    genderButtonText: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.7)',
+        fontWeight: '500',
+    },
+    genderButtonTextActive: {
+        color: Colors.white,
+        fontWeight: '600',
+    },
+    saveButton: {
+        height: 44,
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginTop: 8,
+    },
+    saveButtonGradient: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    saveButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: Colors.white,
+    },
     statsRow: {
         flexDirection: 'row',
         paddingHorizontal: 16,
@@ -441,9 +736,25 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: '#fde68a',
     },
+    achievementCardLocked: {
+        backgroundColor: Colors.gray[100],
+        borderColor: Colors.gray[200],
+        opacity: 0.7,
+    },
+    achievementHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 8,
+    },
     achievementIcon: {
         fontSize: 36,
-        marginBottom: 8,
+    },
+    unlockedBadge: {
+        marginTop: 4,
+    },
+    lockedBadge: {
+        marginTop: 8,
     },
     achievementTitle: {
         fontSize: 14,
@@ -451,9 +762,15 @@ const styles = StyleSheet.create({
         color: Colors.gray[900],
         marginBottom: 4,
     },
+    achievementTitleLocked: {
+        color: Colors.gray[500],
+    },
     achievementDesc: {
         fontSize: 12,
         color: Colors.gray[600],
+    },
+    achievementDescLocked: {
+        color: Colors.gray[400],
     },
     activityList: {
         gap: 16,
