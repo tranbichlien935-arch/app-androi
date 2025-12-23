@@ -1,63 +1,77 @@
 import { Colors } from '@/constants/Colors';
+import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-    Dimensions,
+    Alert,
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
+    TouchableOpacity,
     View
 } from 'react-native';
-import { LineChart } from 'react-native-chart-kit';
-
-const screenWidth = Dimensions.get('window').width;
 
 export default function SleepScreen() {
     const [bedTime, setBedTime] = useState('23:00');
     const [wakeTime, setWakeTime] = useState('07:00');
+    const [totalHours, setTotalHours] = useState(0);
+    const [quality, setQuality] = useState(0);
+    const [loading, setLoading] = useState(true);
 
-    const weeklyData = {
-        labels: ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'],
-        datasets: [
-            {
-                data: [7.5, 6.5, 8.0, 7.0, 7.5, 8.5, 9.0],
-            },
-        ],
+    useEffect(() => {
+        loadSleepData();
+    }, []);
+
+    const loadSleepData = async () => {
+        try {
+            const today = firebaseApi.getTodayDate();
+            const sleepData = await firebaseApi.getSleepLogs(today);
+
+            if (sleepData) {
+                setBedTime(sleepData.bed_time || '23:00');
+                setWakeTime(sleepData.wake_time || '07:00');
+                setTotalHours(sleepData.total_hours || 0);
+                setQuality(sleepData.quality || 0);
+            }
+        } catch (error) {
+            console.error('Error loading sleep data:', error);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const todayStats = {
-        hours: 7.5,
-        quality: 85,
-        deepSleep: 2.5,
-        lightSleep: 4.0,
-        rem: 1.0,
-    };
+    const saveSleepData = async () => {
+        try {
+            const today = firebaseApi.getTodayDate();
 
-    const sleepPhases = [
-        {
-            name: 'Ngủ sâu',
-            hours: todayStats.deepSleep,
-            color: Colors.indigo[600],
-            percentage: (todayStats.deepSleep / todayStats.hours) * 100,
-        },
-        {
-            name: 'Ngủ nông',
-            hours: todayStats.lightSleep,
-            color: Colors.blue[400],
-            percentage: (todayStats.lightSleep / todayStats.hours) * 100,
-        },
-        {
-            name: 'REM',
-            hours: todayStats.rem,
-            color: Colors.purple[400],
-            percentage: (todayStats.rem / todayStats.hours) * 100,
-        },
-    ];
+            // Calculate total hours (simplified)
+            const bedHour = parseInt(bedTime.split(':')[0]);
+            const wakeHour = parseInt(wakeTime.split(':')[0]);
+            let hours = wakeHour - bedHour;
+            if (hours < 0) hours += 24;
+
+            await firebaseApi.addSleepLog({
+                date: today,
+                bed_time: bedTime,
+                wake_time: wakeTime,
+                total_hours: hours,
+                quality: quality,
+                deep_sleep: hours * 0.3,
+                light_sleep: hours * 0.5,
+                rem_sleep: hours * 0.2,
+            });
+
+            setTotalHours(hours);
+            Alert.alert('Thành công', 'Đã lưu dữ liệu giấc ngủ');
+        } catch (error) {
+            Alert.alert('Lỗi', 'Không thể lưu dữ liệu');
+        }
+    };
 
     return (
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-            {/* Sleep Summary Card */}
             <LinearGradient
                 colors={['#6366f1', '#8b5cf6']}
                 style={styles.headerCard}
@@ -70,118 +84,53 @@ export default function SleepScreen() {
                 </View>
 
                 <View style={styles.sleepSummary}>
-                    <View style={styles.summaryItem}>
-                        <Ionicons name="moon" size={24} color="rgba(255,255,255,0.9)" />
-                        <View>
-                            <Text style={styles.summaryLabel}>Tổng thời gian</Text>
-                            <Text style={styles.summaryValue}>{todayStats.hours}h</Text>
-                        </View>
-                    </View>
-                    <View style={styles.summaryItem}>
-                        <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={styles.summaryLabel}>Chất lượng</Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                                <Text style={styles.summaryValue}>{todayStats.quality}</Text>
-                                <Text style={styles.summaryUnit}>/100</Text>
-                            </View>
-                        </View>
+                    <Text style={styles.sleepHours}>{totalHours.toFixed(1)}h</Text>
+                    <Text style={styles.sleepLabel}>Tổng thời gian ngủ</Text>
+                </View>
+
+                <View style={styles.qualityBar}>
+                    <Text style={styles.qualityLabel}>Chất lượng: {quality}%</Text>
+                    <View style={styles.qualityBarBg}>
+                        <View style={[styles.qualityBarFill, { width: `${quality}%` }]} />
                     </View>
                 </View>
 
-                {/* Quality Bar */}
-                <View style={styles.qualityBarBg}>
-                    <View
-                        style={[
-                            styles.qualityBarFill,
-                            { width: `${todayStats.quality}%` },
-                        ]}
-                    />
-                </View>
-
-                {/* Sleep/Wake Times */}
                 <View style={styles.timesGrid}>
-                    <View style={styles.timeBox}>
-                        <Ionicons name="moon" size={20} color="rgba(255,255,255,0.9)" />
-                        <Text style={styles.timeLabel}>Giờ đi ngủ</Text>
-                        <Text style={styles.timeValue}>{bedTime}</Text>
+                    <View style={styles.timeItem}>
+                        <Text style={styles.timeLabel}>Đi ngủ</Text>
+                        <TextInput
+                            style={styles.timeInput}
+                            value={bedTime}
+                            onChangeText={setBedTime}
+                            placeholder="23:00"
+                            placeholderTextColor="rgba(255,255,255,0.5)"
+                        />
                     </View>
-                    <View style={styles.timeBox}>
-                        <Ionicons name="sunny" size={20} color="rgba(255,255,255,0.9)" />
-                        <Text style={styles.timeLabel}>Giờ thức dậy</Text>
-                        <Text style={styles.timeValue}>{wakeTime}</Text>
+                    <View style={styles.timeItem}>
+                        <Text style={styles.timeLabel}>Thức dậy</Text>
+                        <TextInput
+                            style={styles.timeInput}
+                            value={wakeTime}
+                            onChangeText={setWakeTime}
+                            placeholder="07:00"
+                            placeholderTextColor="rgba(255,255,255,0.5)"
+                        />
                     </View>
                 </View>
+
+                <TouchableOpacity onPress={saveSleepData} style={styles.saveButton}>
+                    <Text style={styles.saveButtonText}>Lưu dữ liệu</Text>
+                </TouchableOpacity>
             </LinearGradient>
 
-            {/* Sleep Phases */}
-            <View style={styles.card}>
-                <Text style={styles.cardTitle}>Giai đoạn giấc ngủ</Text>
-
-                {/* Visual Timeline */}
-                <View style={styles.phaseTimeline}>
-                    {sleepPhases.map((phase, index) => (
-                        <View
-                            key={index}
-                            style={[
-                                styles.phaseBar,
-                                { backgroundColor: phase.color, width: `${phase.percentage}%` },
-                            ]}
-                        >
-                            <Text style={styles.phaseHours}>{phase.hours}h</Text>
-                        </View>
-                    ))}
-                </View>
-
-                {/* Phase Details */}
-                <View style={styles.phaseList}>
-                    {sleepPhases.map((phase, index) => (
-                        <View key={index} style={styles.phaseItem}>
-                            <View style={styles.phaseLeft}>
-                                <View
-                                    style={[styles.phaseDot, { backgroundColor: phase.color }]}
-                                />
-                                <Text style={styles.phaseName}>{phase.name}</Text>
-                            </View>
-                            <View style={styles.phaseRight}>
-                                <Text style={styles.phaseValue}>{phase.hours}h</Text>
-                                <Text style={styles.phasePercent}>
-                                    ({Math.round(phase.percentage)}%)
-                                </Text>
-                            </View>
-                        </View>
-                    ))}
-                </View>
-            </View>
-
-            {/* Weekly Chart */}
-            <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                    <Ionicons name="trending-up" size={20} color={Colors.indigo[600]} />
-                    <Text style={styles.cardTitle}>Lịch sử tuần</Text>
-                </View>
-                <LineChart
-                    data={weeklyData}
-                    width={screenWidth - 64}
-                    height={200}
-                    chartConfig={{
-                        backgroundColor: Colors.white,
-                        backgroundGradientFrom: Colors.white,
-                        backgroundGradientTo: Colors.white,
-                        decimalPlaces: 1,
-                        color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
-                        labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
-                        style: {
-                            borderRadius: 16,
-                        },
-                        propsForDots: {
-                            r: '4',
-                            strokeWidth: '2',
-                            stroke: Colors.indigo[600],
-                        },
-                    }}
-                    bezier
-                    style={styles.chart}
-                />
+            {/* Tips */}
+            <View style={styles.tipsCard}>
+                <Text style={styles.tipsTitle}>🌙 Mẹo ngủ ngon</Text>
+                <Text style={styles.tipsText}>
+                    • Ngủ đủ 7-9 giờ mỗi đêm{'\n'}
+                    • Tránh caffeine sau 14h{'\n'}
+                    • Tắt điện thoại trước khi ngủ 30 phút
+                </Text>
             </View>
         </ScrollView>
     );
@@ -197,7 +146,7 @@ const styles = StyleSheet.create({
         marginTop: 8,
         borderRadius: 24,
         padding: 24,
-        shadowColor: Colors.indigo[500],
+        shadowColor: Colors.purple[500],
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.2,
         shadowRadius: 8,
@@ -207,152 +156,97 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        marginBottom: 16,
+        marginBottom: 20,
     },
     headerText: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '600',
         color: Colors.white,
     },
     sleepSummary: {
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        borderRadius: 16,
-        padding: 16,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-    },
-    summaryItem: {
-        flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
+        marginBottom: 20,
     },
-    summaryLabel: {
+    sleepHours: {
+        fontSize: 56,
+        fontWeight: '700',
+        color: Colors.white,
+    },
+    sleepLabel: {
         fontSize: 14,
         color: 'rgba(255,255,255,0.9)',
+        marginTop: 4,
     },
-    summaryValue: {
-        fontSize: 28,
-        fontWeight: '600',
-        color: Colors.white,
+    qualityBar: {
+        marginBottom: 20,
     },
-    summaryUnit: {
+    qualityLabel: {
         fontSize: 14,
-        color: Colors.white,
-        marginLeft: 4,
+        color: 'rgba(255,255,255,0.9)',
+        marginBottom: 8,
     },
     qualityBarBg: {
-        height: 12,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        borderRadius: 6,
+        height: 8,
+        backgroundColor: 'rgba(255,255,255,0.3)',
+        borderRadius: 4,
         overflow: 'hidden',
-        marginBottom: 16,
     },
     qualityBarFill: {
         height: '100%',
-        backgroundColor: '#22c55e',
-        borderRadius: 6,
+        backgroundColor: Colors.white,
+        borderRadius: 4,
     },
     timesGrid: {
         flexDirection: 'row',
         gap: 12,
+        marginBottom: 20,
     },
-    timeBox: {
+    timeItem: {
         flex: 1,
         backgroundColor: 'rgba(255,255,255,0.2)',
         borderRadius: 12,
         padding: 16,
-        alignItems: 'center',
     },
     timeLabel: {
         fontSize: 12,
         color: 'rgba(255,255,255,0.9)',
-        marginTop: 8,
+        marginBottom: 8,
     },
-    timeValue: {
-        fontSize: 20,
+    timeInput: {
+        fontSize: 24,
         fontWeight: '600',
         color: Colors.white,
-        marginTop: 4,
+        textAlign: 'center',
     },
-    card: {
+    saveButton: {
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderRadius: 12,
+        paddingVertical: 14,
+        alignItems: 'center',
+    },
+    saveButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: Colors.white,
+    },
+    tipsCard: {
         margin: 16,
         marginTop: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.purple[50],
         borderRadius: 16,
         padding: 20,
-        shadowColor: Colors.black,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
+        borderWidth: 2,
+        borderColor: Colors.purple[200],
     },
-    cardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 16,
-    },
-    cardTitle: {
+    tipsTitle: {
         fontSize: 16,
         fontWeight: '600',
         color: Colors.gray[900],
-        marginBottom: 16,
+        marginBottom: 8,
     },
-    phaseTimeline: {
-        flexDirection: 'row',
-        height: 48,
-        borderRadius: 12,
-        overflow: 'hidden',
-        marginBottom: 16,
-    },
-    phaseBar: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    phaseHours: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: Colors.white,
-    },
-    phaseList: {
-        gap: 12,
-    },
-    phaseItem: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    phaseLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    phaseDot: {
-        width: 16,
-        height: 16,
-        borderRadius: 8,
-    },
-    phaseName: {
+    tipsText: {
         fontSize: 14,
         color: Colors.gray[700],
-    },
-    phaseRight: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    phaseValue: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: Colors.gray[900],
-    },
-    phasePercent: {
-        fontSize: 12,
-        color: Colors.gray[500],
-    },
-    chart: {
-        marginVertical: 8,
-        borderRadius: 16,
+        lineHeight: 22,
     },
 });

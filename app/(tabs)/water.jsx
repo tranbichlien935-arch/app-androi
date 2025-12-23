@@ -1,8 +1,10 @@
 import { Colors } from '@/constants/Colors';
+import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+    Alert,
     ScrollView,
     StyleSheet,
     Text,
@@ -11,31 +13,54 @@ import {
 } from 'react-native';
 
 export default function WaterScreen() {
-    const [waterIntake, setWaterIntake] = useState(1600);
-    const dailyGoal = 2000;
-    const glassSize = 200;
+    const [waterIntake, setWaterIntake] = useState(0);
+    const [dailyGoal, setDailyGoal] = useState(2000);
+    const [glassSize, setGlassSize] = useState(200);
+    const [loading, setLoading] = useState(true);
 
-    const addWater = (amount) => {
-        setWaterIntake((prev) => Math.min(prev + amount, dailyGoal + 1000));
+    useEffect(() => {
+        loadWaterData();
+    }, []);
+
+    const loadWaterData = async () => {
+        try {
+            const today = firebaseApi.getTodayDate();
+
+            // Load settings
+            const settings = await firebaseApi.getUserSettings();
+            setDailyGoal(settings.daily_water_goal || 2000);
+            setGlassSize(settings.glass_size || 200);
+
+            // Load today's water
+            const waterData = await firebaseApi.getWaterLogs(today);
+            setWaterIntake(waterData.total || 0);
+        } catch (error) {
+            console.error('Error loading water data:', error);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const removeWater = (amount) => {
-        setWaterIntake((prev) => Math.max(prev - amount, 0));
+    const addWater = async (amount) => {
+        try {
+            const today = firebaseApi.getTodayDate();
+            const now = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+            await firebaseApi.addWaterLog({
+                date: today,
+                amount: amount,
+                time: now,
+            });
+
+            setWaterIntake(prev => prev + amount);
+        } catch (error) {
+            Alert.alert('Lỗi', 'Không thể thêm nước');
+        }
     };
 
     const percentage = Math.min((waterIntake / dailyGoal) * 100, 100);
     const glassCount = Math.floor(waterIntake / glassSize);
     const totalGlasses = Math.ceil(dailyGoal / glassSize);
-
-    const weeklyData = [
-        { day: 'T2', amount: 1800 },
-        { day: 'T3', amount: 2200 },
-        { day: 'T4', amount: 1600 },
-        { day: 'T5', amount: 2000 },
-        { day: 'T6', amount: 2400 },
-        { day: 'T7', amount: 1900 },
-        { day: 'CN', amount: 1600 },
-    ];
 
     return (
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -78,12 +103,6 @@ export default function WaterScreen() {
                     >
                         <Text style={styles.actionText}>+300ml</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => removeWater(100)}
-                        style={styles.actionButton}
-                    >
-                        <Text style={styles.actionText}>-100ml</Text>
-                    </TouchableOpacity>
                 </View>
             </LinearGradient>
 
@@ -99,46 +118,30 @@ export default function WaterScreen() {
                             key={index}
                             style={[
                                 styles.glass,
-                                index < glassCount ? styles.glassFilled : styles.glassEmpty,
+                                index < glassCount && styles.glassFilled,
                             ]}
                         >
                             <Ionicons
                                 name="water"
-                                size={16}
-                                color={index < glassCount ? Colors.white : Colors.gray[400]}
+                                size={24}
+                                color={index < glassCount ? Colors.blue[500] : Colors.gray[300]}
                             />
                         </View>
                     ))}
                 </View>
                 <Text style={styles.glassCount}>
-                    {glassCount} / {totalGlasses} ly ({glassSize}ml/ly)
+                    {glassCount} / {totalGlasses} ly
                 </Text>
             </View>
 
-            {/* Weekly Progress */}
-            <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                    <Ionicons name="trending-up" size={20} color={Colors.blue[600]} />
-                    <Text style={styles.cardTitle}>Tiến trình tuần</Text>
-                </View>
-                <View style={styles.weeklyList}>
-                    {weeklyData.map((day, index) => (
-                        <View key={index} style={styles.weeklyItem}>
-                            <Text style={styles.dayLabel}>{day.day}</Text>
-                            <View style={styles.progressBarBg}>
-                                <View
-                                    style={[
-                                        styles.progressBarFill,
-                                        {
-                                            width: `${Math.min((day.amount / dailyGoal) * 100, 100)}%`,
-                                        },
-                                    ]}
-                                />
-                            </View>
-                            <Text style={styles.amountLabel}>{day.amount}ml</Text>
-                        </View>
-                    ))}
-                </View>
+            {/* Tips */}
+            <View style={styles.tipsCard}>
+                <Text style={styles.tipsTitle}>💧 Lợi ích của việc uống đủ nước</Text>
+                <Text style={styles.tipsText}>
+                    • Cải thiện năng lượng và tập trung{'\n'}
+                    • Hỗ trợ tiêu hóa và giảm cân{'\n'}
+                    • Làm đẹp da và chống lão hóa
+                </Text>
             </View>
         </ScrollView>
     );
@@ -164,10 +167,10 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        marginBottom: 24,
+        marginBottom: 20,
     },
     headerText: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '600',
         color: Colors.white,
     },
@@ -177,7 +180,7 @@ const styles = StyleSheet.create({
     },
     waterAmount: {
         fontSize: 56,
-        fontWeight: '600',
+        fontWeight: '700',
         color: Colors.white,
     },
     waterUnit: {
@@ -186,7 +189,7 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     waterPercentage: {
-        fontSize: 28,
+        fontSize: 20,
         fontWeight: '600',
         color: Colors.white,
         marginTop: 8,
@@ -198,13 +201,13 @@ const styles = StyleSheet.create({
     actionButton: {
         flex: 1,
         backgroundColor: 'rgba(255,255,255,0.2)',
-        paddingVertical: 12,
         borderRadius: 12,
+        paddingVertical: 12,
         alignItems: 'center',
     },
     actionText: {
-        fontSize: 14,
-        fontWeight: '500',
+        fontSize: 16,
+        fontWeight: '600',
         color: Colors.white,
     },
     card: {
@@ -237,51 +240,40 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     glass: {
-        width: 40,
+        width: 48,
         height: 48,
-        borderRadius: 8,
+        borderRadius: 12,
+        backgroundColor: Colors.gray[100],
         alignItems: 'center',
         justifyContent: 'center',
     },
     glassFilled: {
-        backgroundColor: Colors.blue[600],
-    },
-    glassEmpty: {
-        backgroundColor: Colors.gray[200],
+        backgroundColor: Colors.blue[100],
     },
     glassCount: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: Colors.gray[900],
+        textAlign: 'center',
+    },
+    tipsCard: {
+        margin: 16,
+        marginTop: 0,
+        backgroundColor: Colors.blue[50],
+        borderRadius: 16,
+        padding: 20,
+        borderWidth: 2,
+        borderColor: Colors.blue[200],
+    },
+    tipsTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: Colors.gray[900],
+        marginBottom: 8,
+    },
+    tipsText: {
         fontSize: 14,
-        color: Colors.gray[600],
-    },
-    weeklyList: {
-        gap: 12,
-    },
-    weeklyItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    dayLabel: {
-        fontSize: 14,
-        color: Colors.gray[600],
-        width: 32,
-    },
-    progressBarBg: {
-        flex: 1,
-        height: 12,
-        backgroundColor: Colors.gray[200],
-        borderRadius: 6,
-        overflow: 'hidden',
-    },
-    progressBarFill: {
-        height: '100%',
-        backgroundColor: Colors.blue[600],
-        borderRadius: 6,
-    },
-    amountLabel: {
-        fontSize: 14,
-        color: Colors.gray[600],
-        width: 64,
-        textAlign: 'right',
+        color: Colors.gray[700],
+        lineHeight: 22,
     },
 });

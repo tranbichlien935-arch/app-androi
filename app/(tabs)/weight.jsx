@@ -1,56 +1,77 @@
 import { Colors } from '@/constants/Colors';
+import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-    Dimensions,
+    Alert,
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
-import { LineChart } from 'react-native-chart-kit';
-
-const screenWidth = Dimensions.get('window').width;
 
 export default function WeightScreen() {
-    const [showAddWeight, setShowAddWeight] = useState(false);
+    const [currentWeight, setCurrentWeight] = useState(0);
+    const [targetWeight, setTargetWeight] = useState(65);
+    const [startWeight, setStartWeight] = useState(70);
+    const [bmi, setBmi] = useState(0);
+    const [newWeight, setNewWeight] = useState('');
+    const [loading, setLoading] = useState(true);
 
-    const weightHistory = [
-        { date: '01/12', weight: 70.5 },
-        { date: '05/12', weight: 70.2 },
-        { date: '08/12', weight: 69.8 },
-        { date: '12/12', weight: 69.5 },
-        { date: '15/12', weight: 69.2 },
-        { date: '18/12', weight: 68.9 },
-        { date: '23/12', weight: 68.5 },
-    ];
+    useEffect(() => {
+        loadWeightData();
+    }, []);
 
-    const currentWeight = 68.5;
-    const targetWeight = 65.0;
-    const startWeight = 70.5;
-    const progress = ((startWeight - currentWeight) / (startWeight - targetWeight)) * 100;
+    const loadWeightData = async () => {
+        try {
+            // Load settings
+            const settings = await firebaseApi.getUserSettings();
+            setTargetWeight(settings.target_weight || 65);
+            setStartWeight(settings.start_weight || 70);
 
-    const stats = {
-        bmi: 22.4,
-        lost: startWeight - currentWeight,
-        remaining: currentWeight - targetWeight,
-        avgWeekly: 0.3,
+            // Load latest weight
+            const weightLogs = await firebaseApi.getWeightLogs(1);
+            if (weightLogs.length > 0) {
+                setCurrentWeight(weightLogs[0].weight);
+                setBmi(weightLogs[0].bmi || 0);
+            }
+        } catch (error) {
+            console.error('Error loading weight data:', error);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const milestones = [
-        { weight: 70, achieved: true, date: '01/12' },
-        { weight: 69, achieved: true, date: '12/12' },
-        { weight: 68, achieved: true, date: '23/12' },
-        { weight: 67, achieved: false, date: null },
-        { weight: 66, achieved: false, date: null },
-        { weight: 65, achieved: false, date: null },
-    ];
+    const saveWeight = async () => {
+        const weight = parseFloat(newWeight);
+        if (!weight || weight <= 0) {
+            Alert.alert('Lỗi', 'Vui lòng nhập cân nặng hợp lệ');
+            return;
+        }
+
+        try {
+            const today = firebaseApi.getTodayDate();
+            const result = await firebaseApi.addWeightLog({
+                date: today,
+                weight: weight,
+            });
+
+            setCurrentWeight(weight);
+            setBmi(result.bmi || 0);
+            setNewWeight('');
+            Alert.alert('Thành công', 'Đã lưu cân nặng');
+        } catch (error) {
+            Alert.alert('Lỗi', 'Không thể lưu cân nặng');
+        }
+    };
+
+    const progress = startWeight > 0 ? ((startWeight - currentWeight) / (startWeight - targetWeight) * 100) : 0;
 
     return (
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-            {/* Current Weight Card */}
             <LinearGradient
                 colors={['#22c55e', '#10b981']}
                 style={styles.headerCard}
@@ -67,145 +88,62 @@ export default function WeightScreen() {
                     <Text style={styles.weightUnit}>kg</Text>
                 </View>
 
-                <View style={styles.statsRow}>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statLabel}>Bắt đầu</Text>
-                        <Text style={styles.statValue}>{startWeight}</Text>
+                <View style={styles.progressSection}>
+                    <View style={styles.progressHeader}>
+                        <Text style={styles.progressLabel}>Tiến độ</Text>
+                        <Text style={styles.progressValue}>{Math.round(progress)}%</Text>
                     </View>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statLabel}>Đã giảm</Text>
-                        <Text style={styles.statValue}>-{stats.lost.toFixed(1)}</Text>
+                    <View style={styles.progressBarBg}>
+                        <View style={[styles.progressBarFill, { width: `${Math.min(progress, 100)}%` }]} />
                     </View>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statLabel}>Mục tiêu</Text>
-                        <Text style={styles.statValue}>{targetWeight}</Text>
+                    <View style={styles.progressLabels}>
+                        <Text style={styles.progressText}>Bắt đầu: {startWeight}kg</Text>
+                        <Text style={styles.progressText}>Mục tiêu: {targetWeight}kg</Text>
                     </View>
                 </View>
 
-                {/* Progress Bar */}
-                <View style={styles.progressCard}>
-                    <View style={styles.progressHeader}>
-                        <Text style={styles.progressLabel}>Tiến độ</Text>
-                        <Text style={styles.progressPercent}>{Math.round(progress)}%</Text>
-                    </View>
-                    <View style={styles.progressBarBg}>
-                        <View
-                            style={[styles.progressBarFill, { width: `${progress}%` }]}
-                        />
-                    </View>
-                    <Text style={styles.progressText}>
-                        Còn {stats.remaining.toFixed(1)} kg nữa để đạt mục tiêu
+                <View style={styles.bmiCard}>
+                    <Text style={styles.bmiLabel}>BMI</Text>
+                    <Text style={styles.bmiValue}>{bmi.toFixed(1)}</Text>
+                    <Text style={styles.bmiStatus}>
+                        {bmi < 18.5 ? 'Thiếu cân' : bmi < 25 ? 'Bình thường' : bmi < 30 ? 'Thừa cân' : 'Béo phì'}
                     </Text>
                 </View>
             </LinearGradient>
 
-            {/* BMI Card */}
+            {/* Add Weight */}
             <View style={styles.card}>
-                <Text style={styles.cardTitle}>Chỉ số BMI</Text>
-                <View style={styles.bmiRow}>
-                    <View>
-                        <Text style={styles.bmiValue}>{stats.bmi}</Text>
-                        <Text style={styles.bmiLabel}>Bình thường</Text>
-                    </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={styles.heightLabel}>Chiều cao</Text>
-                        <Text style={styles.heightValue}>175 cm</Text>
-                    </View>
-                </View>
-            </View>
-
-            {/* Weight Chart */}
-            <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                    <View style={styles.cardTitleRow}>
-                        <Ionicons name="trending-down" size={20} color={Colors.green[600]} />
-                        <Text style={styles.cardTitle}>Biểu đồ cân nặng</Text>
-                    </View>
-                    <TouchableOpacity
-                        onPress={() => setShowAddWeight(true)}
-                        style={styles.addButton}
-                    >
-                        <Ionicons name="add" size={20} color={Colors.white} />
+                <Text style={styles.cardTitle}>Cập nhật cân nặng</Text>
+                <View style={styles.inputRow}>
+                    <TextInput
+                        style={styles.input}
+                        value={newWeight}
+                        onChangeText={setNewWeight}
+                        placeholder="Nhập cân nặng (kg)"
+                        keyboardType="decimal-pad"
+                        placeholderTextColor={Colors.gray[400]}
+                    />
+                    <TouchableOpacity onPress={saveWeight} style={styles.addButton}>
+                        <LinearGradient
+                            colors={Colors.gradient.green}
+                            style={styles.addButtonGradient}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                        >
+                            <Ionicons name="add" size={24} color={Colors.white} />
+                        </LinearGradient>
                     </TouchableOpacity>
                 </View>
-
-                <LineChart
-                    data={{
-                        labels: weightHistory.map((item) => item.date),
-                        datasets: [{ data: weightHistory.map((item) => item.weight) }],
-                    }}
-                    width={screenWidth - 64}
-                    height={220}
-                    chartConfig={{
-                        backgroundColor: Colors.white,
-                        backgroundGradientFrom: Colors.white,
-                        backgroundGradientTo: Colors.white,
-                        decimalPlaces: 1,
-                        color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
-                        labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
-                        style: {
-                            borderRadius: 16,
-                        },
-                        propsForDots: {
-                            r: '4',
-                            strokeWidth: '2',
-                            stroke: Colors.green[600],
-                        },
-                    }}
-                    bezier
-                    style={styles.chart}
-                />
             </View>
 
-            {/* Milestones */}
-            <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                    <Ionicons name="flag" size={20} color={Colors.green[600]} />
-                    <Text style={styles.cardTitle}>Cột mốc quan trọng</Text>
-                </View>
-                <View style={styles.milestoneList}>
-                    {milestones.map((milestone, index) => (
-                        <View
-                            key={index}
-                            style={[
-                                styles.milestoneItem,
-                                milestone.achieved ? styles.milestoneAchieved : styles.milestonePending,
-                            ]}
-                        >
-                            <View
-                                style={[
-                                    styles.milestoneIcon,
-                                    milestone.achieved
-                                        ? styles.milestoneIconAchieved
-                                        : styles.milestoneIconPending,
-                                ]}
-                            >
-                                <Text
-                                    style={[
-                                        styles.milestoneIconText,
-                                        milestone.achieved && styles.milestoneIconTextAchieved,
-                                    ]}
-                                >
-                                    {milestone.achieved ? '✓' : milestone.weight}
-                                </Text>
-                            </View>
-                            <View style={styles.milestoneInfo}>
-                                <Text
-                                    style={[
-                                        styles.milestoneWeight,
-                                        milestone.achieved && styles.milestoneWeightAchieved,
-                                    ]}
-                                >
-                                    {milestone.weight} kg
-                                </Text>
-                                {milestone.achieved && milestone.date && (
-                                    <Text style={styles.milestoneDate}>Đạt được: {milestone.date}</Text>
-                                )}
-                            </View>
-                            {milestone.achieved && <Text style={styles.milestoneEmoji}>🎉</Text>}
-                        </View>
-                    ))}
-                </View>
+            {/* Tips */}
+            <View style={styles.tipsCard}>
+                <Text style={styles.tipsTitle}>⚖️ Mẹo giảm cân hiệu quả</Text>
+                <Text style={styles.tipsText}>
+                    • Cân mỗi sáng sau khi đi vệ sinh{'\n'}
+                    • Ăn đủ chất, giảm calo từ từ{'\n'}
+                    • Kết hợp vận động 30 phút/ngày
+                </Text>
             </View>
         </ScrollView>
     );
@@ -231,48 +169,32 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        marginBottom: 24,
+        marginBottom: 20,
     },
     headerText: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '600',
         color: Colors.white,
     },
     weightDisplay: {
-        alignItems: 'center',
+        flexDirection: 'row',
+        alignItems: 'baseline',
+        justifyContent: 'center',
         marginBottom: 24,
     },
     weightValue: {
         fontSize: 64,
-        fontWeight: '600',
+        fontWeight: '700',
         color: Colors.white,
     },
     weightUnit: {
         fontSize: 24,
-        color: 'rgba(255,255,255,0.9)',
-    },
-    statsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        marginBottom: 16,
-    },
-    statItem: {
-        alignItems: 'center',
-    },
-    statLabel: {
-        fontSize: 14,
-        color: 'rgba(255,255,255,0.9)',
-    },
-    statValue: {
-        fontSize: 20,
         fontWeight: '600',
-        color: Colors.white,
-        marginTop: 4,
+        color: 'rgba(255,255,255,0.9)',
+        marginLeft: 8,
     },
-    progressCard: {
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        borderRadius: 12,
-        padding: 16,
+    progressSection: {
+        marginBottom: 20,
     },
     progressHeader: {
         flexDirection: 'row',
@@ -283,25 +205,50 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: 'rgba(255,255,255,0.9)',
     },
-    progressPercent: {
+    progressValue: {
         fontSize: 14,
         fontWeight: '600',
         color: Colors.white,
     },
     progressBarBg: {
-        height: 12,
+        height: 8,
         backgroundColor: 'rgba(255,255,255,0.3)',
-        borderRadius: 6,
+        borderRadius: 4,
         overflow: 'hidden',
         marginBottom: 8,
     },
     progressBarFill: {
         height: '100%',
         backgroundColor: Colors.white,
-        borderRadius: 6,
+        borderRadius: 4,
+    },
+    progressLabels: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
     },
     progressText: {
         fontSize: 12,
+        color: 'rgba(255,255,255,0.9)',
+    },
+    bmiCard: {
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderRadius: 12,
+        padding: 16,
+        alignItems: 'center',
+    },
+    bmiLabel: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.9)',
+        marginBottom: 4,
+    },
+    bmiValue: {
+        fontSize: 32,
+        fontWeight: '700',
+        color: Colors.white,
+        marginBottom: 4,
+    },
+    bmiStatus: {
+        fontSize: 14,
         color: 'rgba(255,255,255,0.9)',
     },
     card: {
@@ -316,115 +263,54 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 3,
     },
-    cardHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    cardTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
     cardTitle: {
         fontSize: 16,
         fontWeight: '600',
         color: Colors.gray[900],
+        marginBottom: 16,
+    },
+    inputRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    input: {
+        flex: 1,
+        height: 56,
+        backgroundColor: Colors.gray[100],
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        fontSize: 16,
+        color: Colors.gray[900],
     },
     addButton: {
-        backgroundColor: Colors.green[600],
-        width: 36,
-        height: 36,
-        borderRadius: 10,
+        width: 56,
+        height: 56,
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
+    addButtonGradient: {
+        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    bmiRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    bmiValue: {
-        fontSize: 40,
-        fontWeight: '600',
-        color: Colors.green[600],
-    },
-    bmiLabel: {
-        fontSize: 14,
-        color: Colors.green[600],
-        marginTop: 4,
-    },
-    heightLabel: {
-        fontSize: 14,
-        color: Colors.gray[600],
-    },
-    heightValue: {
-        fontSize: 24,
-        fontWeight: '600',
-        color: Colors.gray[900],
-        marginTop: 4,
-    },
-    chart: {
-        marginVertical: 8,
-        borderRadius: 16,
-    },
-    milestoneList: {
-        gap: 12,
-    },
-    milestoneItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        padding: 12,
-        borderRadius: 12,
-        borderWidth: 2,
-    },
-    milestoneAchieved: {
+    tipsCard: {
+        margin: 16,
+        marginTop: 0,
         backgroundColor: Colors.green[50],
+        borderRadius: 16,
+        padding: 20,
+        borderWidth: 2,
         borderColor: Colors.green[200],
     },
-    milestonePending: {
-        backgroundColor: Colors.gray[50],
-        borderColor: Colors.gray[200],
-    },
-    milestoneIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    milestoneIconAchieved: {
-        backgroundColor: Colors.green[600],
-    },
-    milestoneIconPending: {
-        backgroundColor: Colors.gray[300],
-    },
-    milestoneIconText: {
-        fontSize: 14,
+    tipsTitle: {
+        fontSize: 16,
         fontWeight: '600',
-        color: Colors.gray[600],
-    },
-    milestoneIconTextAchieved: {
-        color: Colors.white,
-    },
-    milestoneInfo: {
-        flex: 1,
-    },
-    milestoneWeight: {
-        fontSize: 14,
-        color: Colors.gray[600],
-    },
-    milestoneWeightAchieved: {
         color: Colors.gray[900],
+        marginBottom: 8,
     },
-    milestoneDate: {
-        fontSize: 12,
-        color: Colors.green[600],
-        marginTop: 2,
-    },
-    milestoneEmoji: {
-        fontSize: 24,
+    tipsText: {
+        fontSize: 14,
+        color: Colors.gray[700],
+        lineHeight: 22,
     },
 });

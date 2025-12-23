@@ -5,7 +5,6 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
-import { HabitProvider } from '@/contexts/HabitContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
@@ -39,21 +38,6 @@ function RootLayoutNav() {
         <Stack.Screen name="sign-up" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        <Stack.Screen
-          name="habit/create"
-          options={{
-            presentation: 'card',
-            title: 'New Habit',
-            headerShown: true,
-          }}
-        />
-        <Stack.Screen
-          name="habit/[id]"
-          options={{
-            title: 'Habit Details',
-            headerShown: true,
-          }}
-        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
@@ -63,9 +47,7 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <HabitProvider>
-        <RootLayoutNav />
-      </HabitProvider>
+      <RootLayoutNav />
     </AuthProvider>
   );
 }

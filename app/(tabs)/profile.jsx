@@ -1,8 +1,11 @@
 import { Colors } from '@/constants/Colors';
+import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
+    Alert,
     ScrollView,
     StyleSheet,
     Text,
@@ -11,15 +14,59 @@ import {
 } from 'react-native';
 
 export default function ProfileScreen() {
+    const router = useRouter();
     const [editMode, setEditMode] = useState(false);
+    const [userInfo, setUserInfo] = useState({
+        name: 'Đang tải...',
+        email: '',
+        age: 0,
+        height: 0,
+        gender: '',
+        joinDate: '',
+    });
 
-    const userInfo = {
-        name: 'Nguyễn Văn A',
-        email: 'nguyenvana@email.com',
-        age: 28,
-        height: 175,
-        gender: 'Nam',
-        joinDate: '01/11/2024',
+    useEffect(() => {
+        loadUserProfile();
+    }, []);
+
+    const loadUserProfile = async () => {
+        try {
+            const profile = await firebaseApi.getUserProfile();
+            if (profile) {
+                setUserInfo({
+                    name: profile.full_name || 'Người dùng',
+                    email: profile.email || '',
+                    age: profile.age || 0,
+                    height: profile.height || 0,
+                    gender: profile.gender || 'Chưa cập nhật',
+                    joinDate: profile.created_at ? new Date(profile.created_at.seconds * 1000).toLocaleDateString('vi-VN') : '',
+                });
+            }
+        } catch (error) {
+            console.error('Error loading profile:', error);
+        }
+    };
+
+    const handleLogout = async () => {
+        Alert.alert(
+            'Đăng xuất',
+            'Bạn có chắc muốn đăng xuất?',
+            [
+                { text: 'Hủy', style: 'cancel' },
+                {
+                    text: 'Đăng xuất',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await firebaseApi.logout();
+                            // AuthContext will auto-redirect to /sign-in
+                        } catch (error) {
+                            Alert.alert('Lỗi', 'Không thể đăng xuất');
+                        }
+                    },
+                },
+            ]
+        );
     };
 
     const achievements = [
@@ -233,7 +280,7 @@ export default function ProfileScreen() {
             </View>
 
             {/* Logout Button */}
-            <TouchableOpacity activeOpacity={0.8} style={styles.logoutContainer}>
+            <TouchableOpacity activeOpacity={0.8} style={styles.logoutContainer} onPress={handleLogout}>
                 <LinearGradient
                     colors={['#ef4444', '#dc2626']}
                     style={styles.logoutButton}

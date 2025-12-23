@@ -1,7 +1,10 @@
 import { Colors } from '@/constants/Colors';
+import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,19 +12,78 @@ import {
 } from 'react-native';
 
 export default function HomeScreen() {
-  const todayStats = {
-    steps: 8234,
+  const [loading, setLoading] = useState(true);
+  const [todayStats, setTodayStats] = useState({
+    steps: 0,
     stepsGoal: 10000,
-    water: 1600,
+    water: 0,
     waterGoal: 2000,
-    sleep: 7.5,
+    sleep: 0,
     sleepGoal: 8,
-    weight: 68.5,
+    weight: 0,
+  });
+  const [userName, setUserName] = useState('Bạn');
+
+  useEffect(() => {
+    loadTodayData();
+  }, []);
+
+  const loadTodayData = async () => {
+    try {
+      const today = firebaseApi.getTodayDate();
+
+      // Load user profile
+      const profile = await firebaseApi.getUserProfile();
+      if (profile) {
+        setUserName(profile.full_name || 'Bạn');
+      }
+
+      // Load settings
+      const settings = await firebaseApi.getUserSettings();
+
+      // Load today's summary
+      const summary = await firebaseApi.getDailySummary(today);
+
+      // Load today's water
+      const waterData = await firebaseApi.getWaterLogs(today);
+      const totalWater = waterData.total || 0;
+
+      // Load latest sleep
+      const sleepData = await firebaseApi.getSleepLogs(today);
+      const todaySleep = sleepData ? sleepData.total_hours : 0;
+
+      // Load latest weight
+      const weightLogs = await firebaseApi.getWeightLogs(1);
+      const latestWeight = weightLogs.length > 0 ? weightLogs[0].weight : 0;
+
+      setTodayStats({
+        steps: summary.steps || 0,
+        stepsGoal: settings.daily_steps_goal || 10000,
+        water: totalWater,
+        waterGoal: settings.daily_water_goal || 2000,
+        sleep: todaySleep,
+        sleepGoal: settings.daily_sleep_goal || 8,
+        weight: latestWeight,
+      });
+    } catch (error) {
+      console.error('Error loading today data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const calculateProgress = (current, goal) => {
     return Math.min((current / goal) * 100, 100);
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={Colors.purple[600]} />
+        <Text style={{ marginTop: 16, color: Colors.gray[600] }}>Đang tải...</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -34,7 +96,7 @@ export default function HomeScreen() {
       >
         <View style={styles.welcomeHeader}>
           <View>
-            <Text style={styles.welcomeGreeting}>Xin chào, Nguyễn Văn A</Text>
+            <Text style={styles.welcomeGreeting}>Xin chào, {userName}</Text>
             <Text style={styles.welcomeTitle}>Hôm nay bạn thế nào?</Text>
           </View>
           <Ionicons name="trophy" size={48} color="rgba(255,255,255,0.9)" />

@@ -1,9 +1,11 @@
 import { Colors } from '@/constants/Colors';
+import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
+    Alert,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -22,12 +24,21 @@ export default function SignInScreen() {
     const [isLoading, setIsLoading] = useState(false);
 
     const handleSubmit = async () => {
+        if (!email || !password) {
+            Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
+            return;
+        }
+
         setIsLoading(true);
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        console.log('Sign in:', { email, password });
-        setIsLoading(false);
-        // TODO: Navigate to main app after successful login
+        try {
+            await firebaseApi.login(email, password);
+            // Navigate to main app after successful login
+            router.replace('/(tabs)');
+        } catch (error) {
+            Alert.alert('Đăng nhập thất bại', error.message);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (

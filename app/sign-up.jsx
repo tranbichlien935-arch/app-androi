@@ -1,9 +1,11 @@
 import { Colors } from '@/constants/Colors';
+import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
+    Alert,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -22,25 +24,35 @@ export default function SignUpScreen() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-    const [agreedToTerms, setAgreedToTerms] = useState(false);
+    const [acceptTerms, setAcceptTerms] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
     const handleSubmit = async () => {
-        if (password !== confirmPassword) {
-            alert('Mật khẩu không khớp!');
+        if (!fullName || !email || !password) {
+            Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
             return;
         }
 
-        if (!agreedToTerms) {
-            alert('Vui lòng đồng ý với điều khoản sử dụng');
+        if (password !== confirmPassword) {
+            Alert.alert('Lỗi', 'Mật khẩu không khớp!');
+            return;
+        }
+
+        if (!acceptTerms) {
+            Alert.alert('Lỗi', 'Vui lòng đồng ý với điều khoản sử dụng');
             return;
         }
 
         setIsLoading(true);
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        console.log('Sign up:', { fullName, email, password });
-        setIsLoading(false);
-        // TODO: Navigate after successful registration
+        try {
+            await firebaseApi.register(email, password, { fullName });
+            // Navigate to main app after successful registration
+            router.replace('/(tabs)');
+        } catch (error) {
+            Alert.alert('Đăng ký thất bại', error.message);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -179,16 +191,16 @@ export default function SignUpScreen() {
                     {/* Terms and Conditions */}
                     <TouchableOpacity
                         style={styles.checkboxContainer}
-                        onPress={() => setAgreedToTerms(!agreedToTerms)}
+                        onPress={() => setAcceptTerms(!acceptTerms)}
                         activeOpacity={0.7}
                     >
                         <View
                             style={[
                                 styles.checkbox,
-                                agreedToTerms && styles.checkboxChecked,
+                                acceptTerms && styles.checkboxChecked,
                             ]}
                         >
-                            {agreedToTerms && (
+                            {acceptTerms && (
                                 <Ionicons name="checkmark" size={16} color={Colors.white} />
                             )}
                         </View>
