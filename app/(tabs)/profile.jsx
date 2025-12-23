@@ -210,7 +210,7 @@ export default function ProfileScreen() {
                         <TouchableOpacity key={index} style={styles.menuItem}>
                             <View style={styles.menuLeft}>
                                 <View style={[styles.menuIconContainer, { backgroundColor: item.bg }]}>
-                                    <Ionicons name={item.icon as any} size={20} color={item.color} />
+                                    <Ionicons name={item.icon} size={20} color={item.color} />
                                 </View>
                                 <Text style={styles.menuLabel}>{item.label}</Text>
                             </View>
