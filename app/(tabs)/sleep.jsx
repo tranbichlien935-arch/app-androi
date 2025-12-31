@@ -1,3 +1,7 @@
+import SleepStagesChart from '@/components/charts/SleepStagesChart';
+import WeeklySleepChart from '@/components/charts/WeeklySleepChart';
+import SleepSchedule from '@/components/ui/SleepSchedule';
+import WeeklyAverageCards from '@/components/ui/WeeklyAverageCards';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
@@ -22,6 +26,14 @@ export default function SleepScreen() {
     const [totalHours, setTotalHours] = useState(0);
     const [quality, setQuality] = useState(0);
     const [loading, setLoading] = useState(true);
+
+    // Weekly data states
+    const [weeklyData, setWeeklyData] = useState([]);
+    const [averageHours, setAverageHours] = useState(0);
+    const [averageQuality, setAverageQuality] = useState(0);
+    const [deepSleep, setDeepSleep] = useState(0);
+    const [lightSleep, setLightSleep] = useState(0);
+    const [remSleep, setRemSleep] = useState(0);
 
     useEffect(() => {
         if (!authLoading && isAuthenticated) {
@@ -50,11 +62,53 @@ export default function SleepScreen() {
                 setWakeTime(sleepData.wake_time || '07:00');
                 setTotalHours(sleepData.total_hours || 0);
                 setQuality(sleepData.quality || 0);
+                setDeepSleep(sleepData.deep_sleep || 0);
+                setLightSleep(sleepData.light_sleep || 0);
+                setRemSleep(sleepData.rem_sleep || 0);
             }
+
+            // Load weekly data
+            await loadWeeklySleepData();
         } catch (error) {
             console.error('Error loading sleep data:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadWeeklySleepData = async () => {
+        try {
+            const weeklyLogs = await firebaseApi.getSleepLogs(null, 7);
+
+            // Prepare data for chart
+            const dayLabels = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+            const chartData = [];
+
+            // Get last 7 days
+            for (let i = 6; i >= 0; i--) {
+                const date = new Date();
+                date.setDate(date.getDate() - i);
+                const dateStr = date.toISOString().split('T')[0];
+                const dayIndex = date.getDay();
+
+                const log = weeklyLogs.find(l => l.date === dateStr);
+                chartData.push({
+                    day: dayLabels[dayIndex],
+                    hours: log ? log.total_hours : 0
+                });
+            }
+
+            setWeeklyData(chartData);
+
+            // Calculate averages
+            if (weeklyLogs.length > 0) {
+                const totalHrs = weeklyLogs.reduce((sum, log) => sum + (log.total_hours || 0), 0);
+                const totalQuality = weeklyLogs.reduce((sum, log) => sum + (log.quality || 0), 0);
+                setAverageHours(totalHrs / weeklyLogs.length);
+                setAverageQuality(Math.round(totalQuality / weeklyLogs.length));
+            }
+        } catch (error) {
+            console.error('Error loading weekly sleep data:', error);
         }
     };
 
@@ -138,6 +192,25 @@ export default function SleepScreen() {
                     <Text style={styles.saveButtonText}>Lưu dữ liệu</Text>
                 </TouchableOpacity>
             </LinearGradient>
+
+            {/* Sleep Stages Chart */}
+            <SleepStagesChart
+                deepSleep={deepSleep}
+                lightSleep={lightSleep}
+                remSleep={remSleep}
+            />
+
+            {/* Weekly Sleep Chart */}
+            <WeeklySleepChart weeklyData={weeklyData} />
+
+            {/* Sleep Schedule */}
+            <SleepSchedule bedTime={bedTime} wakeTime={wakeTime} />
+
+            {/* Weekly Average Cards */}
+            <WeeklyAverageCards
+                averageHours={averageHours}
+                averageQuality={averageQuality}
+            />
 
             {/* Tips */}
             <View style={styles.tipsCard}>

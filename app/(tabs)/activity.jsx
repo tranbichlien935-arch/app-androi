@@ -1,3 +1,4 @@
+import QuickAddActivities from '@/components/ui/QuickAddActivities';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
@@ -88,6 +89,15 @@ export default function ActivityScreen() {
         }
     };
 
+    const handleQuickAdd = (activity) => {
+        setNewActivity({
+            name: activity.name,
+            duration: activity.duration.toString(),
+            calories: activity.calories.toString(),
+        });
+        setShowAddActivity(true);
+    };
+
     const handleAddActivity = async () => {
         if (!newActivity.name || !newActivity.duration || !newActivity.calories) {
             Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
@@ -135,29 +145,36 @@ export default function ActivityScreen() {
                 end={{ x: 1, y: 0 }}
             >
                 <Text style={styles.headerTitle}>Tổng hợp hôm nay</Text>
-                <View style={styles.statsGrid}>
-                    <View style={styles.statItem}>
-                        <Ionicons name="footsteps" size={24} color={Colors.white} />
-                        <Text style={styles.statValue}>{todayTotal.steps.toLocaleString()}</Text>
-                        <Text style={styles.statLabel}>Bước chân</Text>
+                <View style={styles.statsContainer}>
+                    <View style={styles.statsRow}>
+                        <View style={styles.statBox}>
+                            <Ionicons name="footsteps" size={20} color={Colors.white} />
+                            <Text style={styles.statValue}>{todayTotal.steps.toLocaleString()}</Text>
+                            <Text style={styles.statLabel}>Bước chân</Text>
+                        </View>
+                        <View style={styles.statBox}>
+                            <Ionicons name="flame" size={20} color={Colors.white} />
+                            <Text style={styles.statValue}>{todayTotal.calories}</Text>
+                            <Text style={styles.statLabel}>kcal</Text>
+                        </View>
                     </View>
-                    <View style={styles.statItem}>
-                        <Ionicons name="flame" size={24} color={Colors.white} />
-                        <Text style={styles.statValue}>{todayTotal.calories}</Text>
-                        <Text style={styles.statLabel}>Calo</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                        <Ionicons name="navigate" size={24} color={Colors.white} />
-                        <Text style={styles.statValue}>{todayTotal.distance.toFixed(1)}</Text>
-                        <Text style={styles.statLabel}>km</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                        <Ionicons name="time" size={24} color={Colors.white} />
-                        <Text style={styles.statValue}>{todayTotal.activeMinutes}</Text>
-                        <Text style={styles.statLabel}>Phút</Text>
+                    <View style={styles.statsRow}>
+                        <View style={styles.statBox}>
+                            <Ionicons name="navigate" size={20} color={Colors.white} />
+                            <Text style={styles.statValue}>{todayTotal.distance.toFixed(1)}</Text>
+                            <Text style={styles.statLabel}>km</Text>
+                        </View>
+                        <View style={styles.statBox}>
+                            <Ionicons name="time" size={20} color={Colors.white} />
+                            <Text style={styles.statValue}>{todayTotal.activeMinutes}</Text>
+                            <Text style={styles.statLabel}>phút</Text>
+                        </View>
                     </View>
                 </View>
             </LinearGradient>
+
+            {/* Quick Add Activities */}
+            <QuickAddActivities onSelectActivity={handleQuickAdd} />
 
             {/* Weekly Chart */}
             <View style={styles.card}>
@@ -183,16 +200,20 @@ export default function ActivityScreen() {
                 />
             </View>
 
-            {/* Recent Activities */}
+            {/* Add Activity Form */}
             <View style={styles.card}>
                 <View style={styles.cardHeader}>
-                    <Text style={styles.cardTitle}>Hoạt động gần đây</Text>
-                    <TouchableOpacity onPress={() => setShowAddActivity(!showAddActivity)}>
-                        <Ionicons name="add-circle" size={28} color={Colors.orange[600]} />
-                    </TouchableOpacity>
+                    <Text style={styles.cardTitle}>Thêm hoạt động</Text>
+                    {showAddActivity && (
+                        <TouchableOpacity onPress={() => {
+                            setShowAddActivity(false);
+                            setNewActivity({ name: '', duration: '', calories: '' });
+                        }}>
+                            <Ionicons name="close-circle" size={28} color={Colors.gray[400]} />
+                        </TouchableOpacity>
+                    )}
                 </View>
 
-                {/* Add Activity Form */}
                 {showAddActivity && (
                     <View style={styles.addForm}>
                         <TextInput
@@ -232,8 +253,11 @@ export default function ActivityScreen() {
                         </TouchableOpacity>
                     </View>
                 )}
+            </View>
 
-                {/* Activities List */}
+            {/* Recent Activities */}
+            <View style={styles.card}>
+                <Text style={styles.cardTitle}>Hoạt động gần đây</Text>
                 <View style={styles.activitiesList}>
                     {activities.length === 0 ? (
                         <Text style={styles.emptyText}>Chưa có hoạt động nào</Text>
@@ -282,23 +306,29 @@ const styles = StyleSheet.create({
         color: Colors.white,
         marginBottom: 16,
     },
-    statsGrid: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    statsContainer: {
+        gap: 12,
     },
-    statItem: {
+    statsRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    statBox: {
+        flex: 1,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderRadius: 12,
+        padding: 16,
         alignItems: 'center',
+        gap: 4,
     },
     statValue: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '700',
         color: Colors.white,
-        marginTop: 8,
     },
     statLabel: {
-        fontSize: 12,
+        fontSize: 11,
         color: 'rgba(255,255,255,0.9)',
-        marginTop: 4,
     },
     card: {
         margin: 16,

@@ -1,3 +1,7 @@
+import WeightChart from '@/components/charts/WeightChart';
+import BMIIndicator from '@/components/ui/BMIIndicator';
+import MilestoneTimeline from '@/components/ui/MilestoneTimeline';
+import WeightStatistics from '@/components/ui/WeightStatistics';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
@@ -6,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     ScrollView,
     StyleSheet,
@@ -27,6 +32,16 @@ export default function WeightScreen() {
     const [tempTarget, setTempTarget] = useState('');
     const [tempStart, setTempStart] = useState('');
     const [loading, setLoading] = useState(true);
+
+    // New state for chart and statistics
+    const [chartData, setChartData] = useState({ labels: [], values: [] });
+    const [statistics, setStatistics] = useState({
+        averageWeeklyLoss: 0,
+        estimatedWeeks: 0,
+        totalLoss: 0,
+        remaining: 0,
+    });
+    const [milestones, setMilestones] = useState([]);
 
     useEffect(() => {
         if (!authLoading && isAuthenticated) {
@@ -56,24 +71,97 @@ export default function WeightScreen() {
             setTargetWeight(settings.target_weight || 65);
             setStartWeight(settings.start_weight || 70);
 
-            // Load latest weight
-            const weightLogs = await firebaseApi.getWeightLogs(1);
+            // Load weight logs (30 days for calculations)
+            const weightLogs = await firebaseApi.getWeightLogs(30);
             console.log('Weight logs loaded:', weightLogs);
 
             if (weightLogs && weightLogs.length > 0) {
                 console.log('Setting current weight:', weightLogs[0].weight);
                 setCurrentWeight(weightLogs[0].weight);
                 setBmi(weightLogs[0].bmi || 0);
+
+                // Process data for chart and statistics
+                processWeightData(weightLogs, settings.target_weight || 65, settings.start_weight || 70);
             } else {
                 console.log('No weight logs found, setting to 0');
                 setCurrentWeight(0);
                 setBmi(0);
+                setChartData({ labels: [], values: [] });
             }
         } catch (error) {
             console.error('Error loading weight data:', error);
         } finally {
             setLoading(false);
         }
+    };
+
+    // Process weight data for chart, statistics, and milestones
+    const processWeightData = (logs, target, start) => {
+        // Prepare chart data (last 7 days)
+        const last7Days = logs.slice(0, 7).reverse();
+        const labels = last7Days.map(log => {
+            const date = new Date(log.date);
+            return `${date.getDate()}/${date.getMonth() + 1}`;
+        });
+        const values = last7Days.map(log => log.weight);
+        setChartData({ labels, values });
+
+        // Calculate statistics (4 weeks = 28 days)
+        const last4Weeks = logs.slice(0, 28);
+        if (last4Weeks.length >= 2) {
+            const oldestWeight = last4Weeks[last4Weeks.length - 1].weight;
+            const newestWeight = last4Weeks[0].weight;
+            const totalChange = oldestWeight - newestWeight;
+            const weeks = last4Weeks.length / 7;
+            const avgWeeklyLoss = totalChange / weeks;
+
+            const currentWeight = logs[0].weight;
+            const totalLoss = start - currentWeight;
+            const remaining = currentWeight - target;
+            const estimatedWeeks = avgWeeklyLoss > 0 ? Math.ceil(remaining / avgWeeklyLoss) : 0;
+
+            setStatistics({
+                averageWeeklyLoss: avgWeeklyLoss,
+                estimatedWeeks: estimatedWeeks > 0 ? estimatedWeeks : 0,
+                totalLoss: totalLoss,
+                remaining: remaining,
+            });
+        }
+
+        // Calculate milestones (every 2kg from start to target)
+        const milestonesArray = [];
+        const step = start > target ? -2 : 2; // Determine direction
+        const direction = start > target ? -1 : 1;
+
+        let currentMilestone = start;
+        while ((direction > 0 && currentMilestone <= target) || (direction < 0 && currentMilestone >= target)) {
+            const completed = logs.some(log => {
+                if (direction > 0) {
+                    return log.weight >= currentMilestone;
+                } else {
+                    return log.weight <= currentMilestone;
+                }
+            });
+
+            const completedLog = logs.find(log => {
+                if (direction > 0) {
+                    return log.weight >= currentMilestone;
+                } else {
+                    return log.weight <= currentMilestone;
+                }
+            });
+
+            milestonesArray.push({
+                weight: currentMilestone,
+                completed: completed,
+                date: completedLog ? firebaseApi.formatDate(completedLog.date) : null,
+                estimatedDate: null, // Can add estimation logic here
+            });
+
+            currentMilestone += step;
+        }
+
+        setMilestones(milestonesArray);
     };
 
     const saveWeight = async () => {
@@ -165,6 +253,15 @@ export default function WeightScreen() {
     const weightChange = getWeightChange();
     const displayBMI = bmi > 0 ? bmi : calculateBMI();
 
+    if (loading) {
+        return (
+            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color={Colors.green[600]} />
+                <Text style={{ marginTop: 16, color: Colors.gray[600] }}>Đang tải...</Text>
+            </View>
+        );
+    }
+
     return (
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
             <LinearGradient
@@ -179,12 +276,7 @@ export default function WeightScreen() {
                 </View>
 
                 <View style={styles.weightDisplay}>
-                    <Text style={styles.weightValue}>
-                        {(() => {
-                            console.log('Rendering currentWeight:', currentWeight);
-                            return currentWeight || 0;
-                        })()}
-                    </Text>
+                    <Text style={styles.weightValue}>{currentWeight || 0}</Text>
                     <Text style={styles.weightUnit}>kg</Text>
                 </View>
 
@@ -218,21 +310,27 @@ export default function WeightScreen() {
                         <Text style={styles.progressText}>Mục tiêu: {targetWeight}kg</Text>
                     </View>
                 </View>
-
-                <View style={styles.bmiCard}>
-                    <Text style={styles.bmiLabel}>BMI</Text>
-                    <Text style={styles.bmiValue}>
-                        {displayBMI > 0 ? displayBMI.toFixed(1) : 'N/A'}
-                    </Text>
-                    {displayBMI > 0 ? (
-                        <Text style={styles.bmiStatus}>
-                            {displayBMI < 18.5 ? 'Thiếu cân' : displayBMI < 25 ? 'Bình thường' : displayBMI < 30 ? 'Thừa cân' : 'Béo phì'}
-                        </Text>
-                    ) : (
-                        <Text style={styles.bmiStatus}>Chưa có chiều cao</Text>
-                    )}
-                </View>
             </LinearGradient>
+
+            {/* Weight Chart */}
+            <WeightChart
+                data={chartData}
+                startWeight={startWeight}
+                targetWeight={targetWeight}
+            />
+
+            {/* BMI Indicator */}
+            <BMIIndicator bmi={displayBMI} height={height} />
+
+            {/* Statistics */}
+            {currentWeight > 0 && (
+                <WeightStatistics statistics={statistics} />
+            )}
+
+            {/* Milestones */}
+            {milestones.length > 0 && (
+                <MilestoneTimeline milestones={milestones} />
+            )}
 
             {/* Settings Card */}
             <View style={styles.card}>

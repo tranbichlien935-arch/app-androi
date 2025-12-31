@@ -1,3 +1,6 @@
+import WeeklyWaterChart from '@/components/charts/WeeklyWaterChart';
+import DailyGoalCard from '@/components/ui/DailyGoalCard';
+import WaterReminders from '@/components/ui/WaterReminders';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
@@ -20,6 +23,10 @@ export default function WaterScreen() {
     const [dailyGoal, setDailyGoal] = useState(2000);
     const [glassSize, setGlassSize] = useState(200);
     const [loading, setLoading] = useState(true);
+
+    // Weekly data
+    const [weeklyData, setWeeklyData] = useState([]);
+    const [reminders, setReminders] = useState([]);
 
     useEffect(() => {
         if (!authLoading && isAuthenticated) {
@@ -50,10 +57,42 @@ export default function WaterScreen() {
             // Load today's water
             const waterData = await firebaseApi.getWaterLogs(today);
             setWaterIntake(waterData.total || 0);
+
+            // Load weekly data
+            await loadWeeklyWaterData();
+
+            // Load reminders (from settings or default)
+            setReminders(settings.water_reminders || []);
         } catch (error) {
             console.error('Error loading water data:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadWeeklyWaterData = async () => {
+        try {
+            const dayLabels = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+            const chartData = [];
+
+            // Get last 7 days
+            for (let i = 6; i >= 0; i--) {
+                const date = new Date();
+                date.setDate(date.getDate() - i);
+                const dateStr = date.toISOString().split('T')[0];
+                const dayIndex = date.getDay();
+
+                const waterData = await firebaseApi.getWaterLogs(dateStr);
+                chartData.push({
+                    day: dayLabels[dayIndex],
+                    amount: waterData.total || 0,
+                    goal: dailyGoal
+                });
+            }
+
+            setWeeklyData(chartData);
+        } catch (error) {
+            console.error('Error loading weekly water data:', error);
         }
     };
 
@@ -71,6 +110,31 @@ export default function WaterScreen() {
             setWaterIntake(prev => prev + amount);
         } catch (error) {
             Alert.alert('Lỗi', 'Không thể thêm nước');
+        }
+    };
+
+    const handleGoalChange = async (newGoal) => {
+        try {
+            setDailyGoal(newGoal);
+            await firebaseApi.updateUserSettings({ daily_water_goal: newGoal });
+        } catch (error) {
+            Alert.alert('Lỗi', 'Không thể cập nhật mục tiêu');
+        }
+    };
+
+    const handleReminderToggle = async (id, value, updatedReminders) => {
+        try {
+            setReminders(updatedReminders);
+            await firebaseApi.updateUserSettings({ water_reminders: updatedReminders });
+
+            // TODO: Schedule/cancel notification based on value
+            if (value) {
+                console.log(`Schedule notification for ${id}`);
+            } else {
+                console.log(`Cancel notification for ${id}`);
+            }
+        } catch (error) {
+            Alert.alert('Lỗi', 'Không thể cập nhật nhắc nhở');
         }
     };
 
@@ -119,6 +183,12 @@ export default function WaterScreen() {
                     >
                         <Text style={styles.actionText}>+300ml</Text>
                     </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => addWater(100)}
+                        style={styles.actionButton}
+                    >
+                        <Text style={styles.actionText}>+100ml</Text>
+                    </TouchableOpacity>
                 </View>
             </LinearGradient>
 
@@ -129,26 +199,59 @@ export default function WaterScreen() {
                     <Text style={styles.cardTitle}>Ly nước đã uống</Text>
                 </View>
                 <View style={styles.glassGrid}>
-                    {Array.from({ length: totalGlasses }).map((_, index) => (
-                        <View
-                            key={index}
-                            style={[
-                                styles.glass,
-                                index < glassCount && styles.glassFilled,
-                            ]}
-                        >
-                            <Ionicons
-                                name="water"
-                                size={24}
-                                color={index < glassCount ? Colors.blue[500] : Colors.gray[300]}
-                            />
-                        </View>
-                    ))}
+                    {Array.from({ length: totalGlasses }).map((_, index) => {
+                        const isFilled = index < glassCount;
+                        return (
+                            <View
+                                key={index}
+                                style={[
+                                    styles.glass,
+                                    isFilled && styles.glassFilled,
+                                ]}
+                            >
+                                {isFilled ? (
+                                    <LinearGradient
+                                        colors={['#3b82f6', '#06b6d4']}
+                                        style={styles.waterDrop}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                    >
+                                        <Ionicons
+                                            name="water"
+                                            size={24}
+                                            color={Colors.white}
+                                        />
+                                    </LinearGradient>
+                                ) : (
+                                    <Ionicons
+                                        name="water"
+                                        size={24}
+                                        color={Colors.gray[300]}
+                                    />
+                                )}
+                            </View>
+                        );
+                    })}
                 </View>
                 <Text style={styles.glassCount}>
                     {glassCount} / {totalGlasses} ly
                 </Text>
             </View>
+
+            {/* Weekly Water Chart */}
+            <WeeklyWaterChart weeklyData={weeklyData} />
+
+            {/* Daily Goal Card */}
+            <DailyGoalCard
+                dailyGoal={dailyGoal}
+                onGoalChange={handleGoalChange}
+            />
+
+            {/* Water Reminders */}
+            <WaterReminders
+                reminders={reminders}
+                onToggle={handleReminderToggle}
+            />
 
             {/* Tips */}
             <View style={styles.tipsCard}>
@@ -262,9 +365,17 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.gray[100],
         alignItems: 'center',
         justifyContent: 'center',
+        overflow: 'hidden',
     },
     glassFilled: {
-        backgroundColor: Colors.blue[100],
+        backgroundColor: 'transparent',
+    },
+    waterDrop: {
+        width: '100%',
+        height: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 12,
     },
     glassCount: {
         fontSize: 16,

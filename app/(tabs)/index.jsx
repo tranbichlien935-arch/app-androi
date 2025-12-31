@@ -1,3 +1,5 @@
+import WeeklyActivityChart from '@/components/charts/WeeklyActivityChart';
+import RecentAchievements from '@/components/ui/RecentAchievements';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
@@ -19,13 +21,15 @@ export default function HomeScreen() {
   const [todayStats, setTodayStats] = useState({
     steps: 0,
     stepsGoal: 10000,
+    calories: 0,
+    caloriesGoal: 500,
     water: 0,
     waterGoal: 2000,
     sleep: 0,
     sleepGoal: 8,
-    weight: 0,
   });
   const [userName, setUserName] = useState('Bạn');
+  const [weeklyStepsData, setWeeklyStepsData] = useState([0, 0, 0, 0, 0, 0, 0]);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
@@ -68,19 +72,21 @@ export default function HomeScreen() {
       const sleepData = await firebaseApi.getSleepLogs(today);
       const todaySleep = sleepData ? sleepData.total_hours : 0;
 
-      // Load latest weight
-      const weightLogs = await firebaseApi.getWeightLogs(1);
-      const latestWeight = weightLogs.length > 0 ? weightLogs[0].weight : 0;
-
       setTodayStats({
         steps: summary.steps || 0,
         stepsGoal: settings.daily_steps_goal || 10000,
+        calories: summary.calories || 0,
+        caloriesGoal: settings.daily_calories_goal || 500,
         water: totalWater,
         waterGoal: settings.daily_water_goal || 2000,
         sleep: todaySleep,
         sleepGoal: settings.daily_sleep_goal || 8,
-        weight: latestWeight,
       });
+
+      // Load weekly data for chart
+      const weeklySummaries = await firebaseApi.getDailySummary(null, 7);
+      const weeklySteps = weeklySummaries.map(s => s.steps || 0);
+      setWeeklyStepsData(weeklySteps.length === 7 ? weeklySteps.reverse() : [0, 0, 0, 0, 0, 0, 0]);
     } catch (error) {
       console.error('Error loading today data:', error);
     } finally {
@@ -147,65 +153,75 @@ export default function HomeScreen() {
       {/* Quick Stats */}
       <View style={styles.statsGrid}>
         {/* Steps */}
-        <View style={[styles.statCard, { borderColor: Colors.orange[100] }]}>
-          <LinearGradient
-            colors={Colors.gradient.orange}
-            style={styles.statIcon}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
+        <View style={[styles.statCard, { backgroundColor: '#ffedd5' }]}>
+          <View style={[styles.statIconContainer, { backgroundColor: '#f97316' }]}>
             <Ionicons name="footsteps" size={20} color={Colors.white} />
-          </LinearGradient>
+          </View>
           <Text style={styles.statLabel}>Bước chân</Text>
           <Text style={styles.statValue}>{todayStats.steps.toLocaleString()}</Text>
-          <Text style={styles.statGoal}>/ {todayStats.stepsGoal.toLocaleString()}</Text>
+          <Text style={styles.statGoal}>Mục tiêu: {todayStats.stepsGoal.toLocaleString()}</Text>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, {
+              width: `${calculateProgress(todayStats.steps, todayStats.stepsGoal)}%`,
+              backgroundColor: '#f97316'
+            }]} />
+          </View>
+        </View>
+
+        {/* Calories */}
+        <View style={[styles.statCard, { backgroundColor: '#fee2e2' }]}>
+          <View style={[styles.statIconContainer, { backgroundColor: '#ef4444' }]}>
+            <Ionicons name="flame" size={20} color={Colors.white} />
+          </View>
+          <Text style={styles.statLabel}>Calo đốt</Text>
+          <Text style={styles.statValue}>{todayStats.calories} kcal</Text>
+          <Text style={styles.statGoal}>Mục tiêu: {todayStats.caloriesGoal} kcal</Text>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, {
+              width: `${calculateProgress(todayStats.calories, todayStats.caloriesGoal)}%`,
+              backgroundColor: '#ef4444'
+            }]} />
+          </View>
         </View>
 
         {/* Water */}
-        <View style={[styles.statCard, { borderColor: Colors.blue[100] }]}>
-          <LinearGradient
-            colors={Colors.gradient.blue}
-            style={styles.statIcon}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
+        <View style={[styles.statCard, { backgroundColor: '#dbeafe' }]}>
+          <View style={[styles.statIconContainer, { backgroundColor: '#3b82f6' }]}>
             <Ionicons name="water" size={20} color={Colors.white} />
-          </LinearGradient>
+          </View>
           <Text style={styles.statLabel}>Nước uống</Text>
           <Text style={styles.statValue}>{todayStats.water} ml</Text>
-          <Text style={styles.statGoal}>/ {todayStats.waterGoal} ml</Text>
+          <Text style={styles.statGoal}>Mục tiêu: {todayStats.waterGoal} ml</Text>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, {
+              width: `${calculateProgress(todayStats.water, todayStats.waterGoal)}%`,
+              backgroundColor: '#3b82f6'
+            }]} />
+          </View>
         </View>
 
         {/* Sleep */}
-        <View style={[styles.statCard, { borderColor: Colors.indigo[100] }]}>
-          <LinearGradient
-            colors={Colors.gradient.purple}
-            style={styles.statIcon}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
+        <View style={[styles.statCard, { backgroundColor: '#f3e8ff' }]}>
+          <View style={[styles.statIconContainer, { backgroundColor: '#a855f7' }]}>
             <Ionicons name="moon" size={20} color={Colors.white} />
-          </LinearGradient>
+          </View>
           <Text style={styles.statLabel}>Giấc ngủ</Text>
           <Text style={styles.statValue}>{todayStats.sleep}h</Text>
-          <Text style={styles.statGoal}>/ {todayStats.sleepGoal}h</Text>
-        </View>
-
-        {/* Weight */}
-        <View style={[styles.statCard, { borderColor: Colors.green[100] }]}>
-          <LinearGradient
-            colors={Colors.gradient.green}
-            style={styles.statIcon}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Ionicons name="scale" size={20} color={Colors.white} />
-          </LinearGradient>
-          <Text style={styles.statLabel}>Cân nặng</Text>
-          <Text style={styles.statValue}>{todayStats.weight} kg</Text>
-          <Text style={styles.statGoal}>Hôm nay</Text>
+          <Text style={styles.statGoal}>Mục tiêu: {todayStats.sleepGoal}h</Text>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, {
+              width: `${calculateProgress(todayStats.sleep, todayStats.sleepGoal)}%`,
+              backgroundColor: '#a855f7'
+            }]} />
+          </View>
         </View>
       </View>
+
+      {/* Weekly Activity Chart */}
+      <WeeklyActivityChart weeklyData={weeklyStepsData} />
+
+      {/* Recent Achievements */}
+      <RecentAchievements onViewAll={() => console.log('View all achievements')} />
 
       {/* Quick Tips */}
       <View style={styles.tipsCard}>
@@ -290,17 +306,15 @@ const styles = StyleSheet.create({
   },
   statCard: {
     width: '47%',
-    backgroundColor: Colors.white,
     borderRadius: 16,
     padding: 16,
-    borderWidth: 2,
     shadowColor: Colors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  statIcon: {
+  statIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 12,
@@ -309,19 +323,30 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: Colors.gray[600],
     marginBottom: 4,
   },
   statValue: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
     color: Colors.slate[900],
+    marginBottom: 2,
   },
   statGoal: {
-    fontSize: 12,
+    fontSize: 11,
     color: Colors.gray[500],
-    marginTop: 2,
+    marginBottom: 8,
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
   },
   tipsCard: {
     margin: 16,

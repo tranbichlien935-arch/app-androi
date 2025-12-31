@@ -234,11 +234,46 @@ export default function ProfileScreen() {
         }
     };
 
+    const handleMenuPress = (action) => {
+        if (action === 'privacy') {
+            Alert.alert(
+                '🔒 Chính sách quyền riêng tư',
+                'Healio cam kết bảo vệ quyền riêng tư của bạn:\n\n' +
+                '• Dữ liệu sức khỏe được mã hóa và lưu trữ an toàn\n' +
+                '• Không chia sẻ thông tin cá nhân với bên thứ ba\n' +
+                '• Bạn có toàn quyền kiểm soát dữ liệu của mình\n' +
+                '• Dữ liệu chỉ được sử dụng để cải thiện trải nghiệm\n\n' +
+                'Để biết thêm chi tiết, vui lòng truy cập trang web của chúng tôi.',
+                [{ text: 'Đã hiểu', style: 'default' }]
+            );
+        } else if (action === 'help') {
+            Alert.alert(
+                '❓ Trợ giúp & Hỗ trợ',
+                'Cần hỗ trợ? Chúng tôi luôn sẵn sàng giúp đỡ!\n\n' +
+                '📧 Email: support@healio.com\n' +
+                '📱 Hotline: 1900-3105\n' +
+                '🌐 Website: www.healio.com\n\n' +
+                'Thời gian hỗ trợ: 8:00 - 22:00 hàng ngày',
+                [{ text: 'Đóng', style: 'cancel' }]
+            );
+        }
+    };
+
     const menuItems = [
-        { icon: 'settings-outline', label: 'Cài đặt', color: Colors.gray[600], bg: Colors.gray[100] },
-        { icon: 'notifications-outline', label: 'Thông báo', color: Colors.blue[600], bg: Colors.blue[100] },
-        { icon: 'shield-checkmark-outline', label: 'Quyền riêng tư', color: Colors.purple[600], bg: Colors.purple[100] },
-        { icon: 'help-circle-outline', label: 'Trợ giúp', color: Colors.green[600], bg: Colors.green[100] },
+        {
+            icon: 'shield-checkmark-outline',
+            label: 'Chính sách quyền riêng tư',
+            color: Colors.purple[600],
+            bg: Colors.purple[100],
+            action: 'privacy'
+        },
+        {
+            icon: 'help-circle-outline',
+            label: 'Trợ giúp & Hỗ trợ',
+            color: Colors.green[600],
+            bg: Colors.green[100],
+            action: 'help'
+        },
     ];
 
     return (
@@ -525,10 +560,14 @@ export default function ProfileScreen() {
 
             {/* Settings Menu */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Cài đặt</Text>
+                <Text style={styles.sectionTitle}>Thông tin & Hỗ trợ</Text>
                 <View style={styles.menuList}>
                     {menuItems.map((item, index) => (
-                        <TouchableOpacity key={index} style={styles.menuItem}>
+                        <TouchableOpacity
+                            key={index}
+                            style={styles.menuItem}
+                            onPress={() => handleMenuPress(item.action)}
+                        >
                             <View style={styles.menuLeft}>
                                 <View style={[styles.menuIconContainer, { backgroundColor: item.bg }]}>
                                     <Ionicons name={item.icon} size={20} color={item.color} />
