@@ -23,8 +23,8 @@ import {
 export default function WeightScreen() {
     const { isAuthenticated, loading: authLoading } = useAuth();
     const [currentWeight, setCurrentWeight] = useState(0);
-    const [targetWeight, setTargetWeight] = useState(65);
-    const [startWeight, setStartWeight] = useState(70);
+    const [targetWeight, setTargetWeight] = useState(0);
+    const [startWeight, setStartWeight] = useState(0);
     const [height, setHeight] = useState(170);
     const [bmi, setBmi] = useState(0);
     const [newWeight, setNewWeight] = useState('');
@@ -64,12 +64,12 @@ export default function WeightScreen() {
         try {
             // Load user profile for height
             const profile = await firebaseApi.getUserProfile();
-            setHeight(profile.height || 170);
+            setHeight(profile.height || 0);
 
             // Load settings for weight goals
             const settings = await firebaseApi.getUserSettings();
-            setTargetWeight(settings.target_weight || 65);
-            setStartWeight(settings.start_weight || 70);
+            setTargetWeight(settings.target_weight || 0);
+            setStartWeight(settings.start_weight || 0);
 
             // Load weight logs (30 days for calculations)
             const weightLogs = await firebaseApi.getWeightLogs(30);
@@ -81,7 +81,7 @@ export default function WeightScreen() {
                 setBmi(weightLogs[0].bmi || 0);
 
                 // Process data for chart and statistics
-                processWeightData(weightLogs, settings.target_weight || 65, settings.start_weight || 70);
+                processWeightData(weightLogs, settings.target_weight || 0, settings.start_weight || 0);
             } else {
                 console.log('No weight logs found, setting to 0');
                 setCurrentWeight(0);
@@ -165,7 +165,8 @@ export default function WeightScreen() {
     };
 
     const saveWeight = async () => {
-        const weight = parseFloat(newWeight);
+        // Handle comma for Vietnamese locale
+        const weight = parseFloat(newWeight.replace(',', '.'));
 
         if (!weight || weight <= 0 || isNaN(weight)) {
             Alert.alert('Lỗi', 'Vui lòng nhập cân nặng hợp lệ');
@@ -192,8 +193,9 @@ export default function WeightScreen() {
     };
 
     const saveSettings = async () => {
-        const targetVal = parseFloat(tempTarget);
-        const startVal = parseFloat(tempStart);
+        // Handle comma for Vietnamese locale
+        const targetVal = parseFloat(tempTarget.replace(',', '.'));
+        const startVal = parseFloat(tempStart.replace(',', '.'));
 
         if (!targetVal || targetVal <= 0 || isNaN(targetVal)) {
             return;
@@ -312,12 +314,32 @@ export default function WeightScreen() {
                 </View>
             </LinearGradient>
 
-            {/* Weight Chart */}
-            <WeightChart
-                data={chartData}
-                startWeight={startWeight}
-                targetWeight={targetWeight}
-            />
+            {/* Empty State */}
+            {currentWeight === 0 && (
+                <View style={styles.emptyState}>
+                    <View style={styles.emptyStateIcon}>
+                        <Ionicons name="scale-outline" size={64} color={Colors.gray[300]} />
+                    </View>
+                    <Text style={styles.emptyStateTitle}>Chưa có dữ liệu cân nặng</Text>
+                    <Text style={styles.emptyStateText}>
+                        Thêm cân nặng để xem biểu đồ
+                    </Text>
+                    <View style={styles.emptyStateTips}>
+                        <Text style={styles.emptyStateTipTitle}>💡 Cách thêm cân nặng:</Text>
+                        <Text style={styles.emptyStateTip}>• Nhập ở mục "Cập nhật cân nặng" bên dưới</Text>
+                        <Text style={styles.emptyStateTip}>• Hoặc cập nhật từ trang Hồ sơ</Text>
+                    </View>
+                </View>
+            )}
+
+            {/* Weight Chart - Only show when have data */}
+            {currentWeight > 0 && (
+                <WeightChart
+                    data={chartData}
+                    startWeight={startWeight}
+                    targetWeight={targetWeight}
+                />
+            )}
 
             {/* BMI Indicator */}
             <BMIIndicator bmi={displayBMI} height={height} />
@@ -331,6 +353,31 @@ export default function WeightScreen() {
             {milestones.length > 0 && (
                 <MilestoneTimeline milestones={milestones} />
             )}
+
+            {/* Add Weight - Moved to top for better UX */}
+            <View style={styles.card}>
+                <Text style={styles.cardTitle}>Cập nhật cân nặng</Text>
+                <View style={styles.inputRow}>
+                    <TextInput
+                        style={styles.input}
+                        value={newWeight}
+                        onChangeText={setNewWeight}
+                        placeholder="Nhập cân nặng (kg)"
+                        keyboardType="decimal-pad"
+                        placeholderTextColor={Colors.gray[400]}
+                    />
+                    <TouchableOpacity onPress={saveWeight} style={styles.addButton}>
+                        <LinearGradient
+                            colors={Colors.gradient.green}
+                            style={styles.addButtonGradient}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                        >
+                            <Ionicons name="add" size={24} color={Colors.white} />
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </View>
+            </View>
 
             {/* Settings Card */}
             <View style={styles.card}>
@@ -409,31 +456,6 @@ export default function WeightScreen() {
                         </View>
                     </View>
                 )}
-            </View>
-
-            {/* Add Weight */}
-            <View style={styles.card}>
-                <Text style={styles.cardTitle}>Cập nhật cân nặng</Text>
-                <View style={styles.inputRow}>
-                    <TextInput
-                        style={styles.input}
-                        value={newWeight}
-                        onChangeText={setNewWeight}
-                        placeholder="Nhập cân nặng (kg)"
-                        keyboardType="decimal-pad"
-                        placeholderTextColor={Colors.gray[400]}
-                    />
-                    <TouchableOpacity onPress={saveWeight} style={styles.addButton}>
-                        <LinearGradient
-                            colors={Colors.gradient.green}
-                            style={styles.addButtonGradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                        >
-                            <Ionicons name="add" size={24} color={Colors.white} />
-                        </LinearGradient>
-                    </TouchableOpacity>
-                </View>
             </View>
 
             {/* Tips */}

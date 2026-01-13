@@ -42,19 +42,38 @@ function RootLayoutNav() {
 
     const inAuthGroup = segments[0] === '(tabs)';
     const inWelcome = segments[0] === 'welcome';
+    const inSignIn = segments[0] === 'sign-in';
+    const inSignUp = segments[0] === 'sign-up';
 
-    // Show welcome screen on first launch
-    if (!hasSeenWelcome && !inWelcome) {
+    console.log('Navigation Debug:', {
+      hasSeenWelcome,
+      isAuthenticated,
+      currentSegment: segments[0],
+      inWelcome,
+      inSignIn,
+      inSignUp,
+      inAuthGroup
+    });
+
+    // Priority 1: Show welcome screen on first launch
+    if (!hasSeenWelcome && !inWelcome && !inSignIn && !inSignUp) {
+      console.log('Redirecting to welcome screen');
       router.replace('/welcome');
       return;
     }
 
+    // Priority 2: Redirect to sign-in if not authenticated and trying to access protected routes
     if (!isAuthenticated && inAuthGroup) {
-      // Redirect to sign-in if not authenticated
+      console.log('Redirecting to sign-in (not authenticated)');
       router.replace('/sign-in');
-    } else if (isAuthenticated && !inAuthGroup && !inWelcome) {
-      // Redirect to tabs if authenticated
+      return;
+    }
+
+    // Priority 3: Redirect to tabs if authenticated and on auth pages
+    if (isAuthenticated && (inSignIn || inSignUp || inWelcome)) {
+      console.log('Redirecting to tabs (already authenticated)');
       router.replace('/(tabs)');
+      return;
     }
   }, [isAuthenticated, loading, segments, hasSeenWelcome]);
 

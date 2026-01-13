@@ -1,6 +1,7 @@
 import {
     createUserWithEmailAndPassword,
     onAuthStateChanged,
+    sendPasswordResetEmail,
     signInWithEmailAndPassword,
     signOut,
 } from 'firebase/auth';
@@ -19,6 +20,12 @@ import {
     updateDoc,
     where,
 } from 'firebase/firestore';
+import {
+    getDownloadURL,
+    getStorage,
+    ref,
+    uploadBytes
+} from 'firebase/storage';
 import { auth, db } from '../config/firebase';
 
 class FirebaseApiService {
@@ -101,6 +108,15 @@ class FirebaseApiService {
             return { success: true };
         } catch (error) {
             throw new Error('Đăng xuất thất bại');
+        }
+    }
+
+    async resetPassword(email) {
+        try {
+            await sendPasswordResetEmail(auth, email);
+            return { success: true };
+        } catch (error) {
+            throw new Error(this.getErrorMessage(error.code));
         }
     }
 
@@ -500,9 +516,39 @@ class FirebaseApiService {
         try {
             const userRef = doc(db, 'users', userId);
             await updateDoc(userRef, data);
-            return data;
+            return { success: true };
         } catch (error) {
-            throw new Error('Lỗi khi cập nhật thông tin');
+            throw new Error('Không thể cập nhật thông tin');
+        }
+    }
+
+    async uploadProfilePicture(uri) {
+        const userId = this.getCurrentUserId();
+        if (!userId) throw new Error('Chưa đăng nhập');
+
+        try {
+            // Create a reference to Firebase Storage
+            const storage = getStorage();
+            const filename = `profile_${userId}_${Date.now()}.jpg`;
+            const storageRef = ref(storage, `profile_pictures/${filename}`);
+
+            // Convert URI to blob
+            const response = await fetch(uri);
+            const blob = await response.blob();
+
+            // Upload to Firebase Storage
+            await uploadBytes(storageRef, blob);
+
+            // Get download URL
+            const downloadURL = await getDownloadURL(storageRef);
+
+            // Update user profile with new photo URL
+            await this.updateUserProfile({ photo_url: downloadURL });
+
+            return { success: true, url: downloadURL };
+        } catch (error) {
+            console.error('Upload error:', error);
+            throw new Error('Không thể tải ảnh lên');
         }
     }
 
@@ -541,7 +587,7 @@ class FirebaseApiService {
                 const year = date.getFullYear();
                 const month = String(date.getMonth() + 1).padStart(2, '0');
                 const day = String(date.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
+                return `${year} -${month} -${day} `;
             };
 
             const firstDayStr = formatDate(firstDay);
@@ -636,7 +682,7 @@ class FirebaseApiService {
                 const year = date.getFullYear();
                 const month = String(date.getMonth() + 1).padStart(2, '0');
                 const day = String(date.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
+                return `${year} -${month} -${day} `;
             };
 
             let consecutiveDays = 0;
@@ -924,7 +970,7 @@ class FirebaseApiService {
                 const year = date.getFullYear();
                 const month = String(date.getMonth() + 1).padStart(2, '0');
                 const day = String(date.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
+                return `${year} -${month} -${day} `;
             };
 
             // Group by date and sum values

@@ -38,7 +38,6 @@ export default function ActivityScreen() {
     const [newActivity, setNewActivity] = useState({
         name: '',
         duration: '',
-        calories: '',
     });
 
     useEffect(() => {
@@ -93,13 +92,12 @@ export default function ActivityScreen() {
         setNewActivity({
             name: activity.name,
             duration: activity.duration.toString(),
-            calories: activity.calories.toString(),
         });
         setShowAddActivity(true);
     };
 
     const handleAddActivity = async () => {
-        if (!newActivity.name || !newActivity.duration || !newActivity.calories) {
+        if (!newActivity.name || !newActivity.duration) {
             Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
             return;
         }
@@ -107,12 +105,37 @@ export default function ActivityScreen() {
         try {
             const today = firebaseApi.getTodayDate();
             const now = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+            const duration = parseInt(newActivity.duration);
+
+            // Auto-calculate calories based on activity type
+            let calories = 0;
+            let distance = 0;
+            const activityName = newActivity.name.toLowerCase();
+
+            if (activityName.includes('đi bộ') || activityName.includes('walking')) {
+                calories = duration * 4; // 4 kcal/min
+                distance = (duration / 60) * 5; // 5 km/h
+            } else if (activityName.includes('chạy') || activityName.includes('running')) {
+                calories = duration * 10; // 10 kcal/min
+                distance = (duration / 60) * 10; // 10 km/h
+            } else if (activityName.includes('đạp xe') || activityName.includes('cycling')) {
+                calories = duration * 8; // 8 kcal/min
+                distance = (duration / 60) * 20; // 20 km/h
+            } else if (activityName.includes('yoga')) {
+                calories = duration * 3; // 3 kcal/min
+            } else if (activityName.includes('gym')) {
+                calories = duration * 6; // 6 kcal/min
+            } else if (activityName.includes('bơi lội') || activityName.includes('swimming')) {
+                calories = duration * 9; // 9 kcal/min
+            } else {
+                calories = duration * 5; // Default: 5 kcal/min
+            }
 
             await firebaseApi.createActivity({
                 name: newActivity.name,
-                duration: parseInt(newActivity.duration),
-                calories: parseInt(newActivity.calories),
-                distance: 0,
+                duration: duration,
+                calories: calories,
+                distance: distance,
                 time: now,
                 date: today,
             });
@@ -121,15 +144,15 @@ export default function ActivityScreen() {
             await firebaseApi.updateDailySummary({
                 date: today,
                 steps: todayTotal.steps,
-                distance: todayTotal.distance,
-                calories: todayTotal.calories + parseInt(newActivity.calories),
-                active_minutes: todayTotal.activeMinutes + parseInt(newActivity.duration),
+                distance: todayTotal.distance + distance,
+                calories: todayTotal.calories + calories,
+                active_minutes: todayTotal.activeMinutes + duration,
             });
 
-            setNewActivity({ name: '', duration: '', calories: '' });
+            setNewActivity({ name: '', duration: '' });
             setShowAddActivity(false);
             loadActivityData();
-            Alert.alert('Thành công', 'Đã thêm hoạt động');
+            Alert.alert('Thành công', `Đã thêm hoạt động (${calories} kcal)`);
         } catch (error) {
             Alert.alert('Lỗi', 'Không thể thêm hoạt động');
         }
@@ -207,7 +230,7 @@ export default function ActivityScreen() {
                     {showAddActivity && (
                         <TouchableOpacity onPress={() => {
                             setShowAddActivity(false);
-                            setNewActivity({ name: '', duration: '', calories: '' });
+                            setNewActivity({ name: '', duration: '' });
                         }}>
                             <Ionicons name="close-circle" size={28} color={Colors.gray[400]} />
                         </TouchableOpacity>
@@ -218,29 +241,20 @@ export default function ActivityScreen() {
                     <View style={styles.addForm}>
                         <TextInput
                             style={styles.input}
-                            placeholder="Tên hoạt động"
+                            placeholder="Tên hoạt động (VD: Đi bộ, Chạy, Đạp xe)"
                             value={newActivity.name}
                             onChangeText={(text) => setNewActivity({ ...newActivity, name: text })}
                             placeholderTextColor={Colors.gray[400]}
                         />
-                        <View style={styles.inputRow}>
-                            <TextInput
-                                style={[styles.input, { flex: 1 }]}
-                                placeholder="Phút"
-                                value={newActivity.duration}
-                                onChangeText={(text) => setNewActivity({ ...newActivity, duration: text })}
-                                keyboardType="number-pad"
-                                placeholderTextColor={Colors.gray[400]}
-                            />
-                            <TextInput
-                                style={[styles.input, { flex: 1 }]}
-                                placeholder="Calo"
-                                value={newActivity.calories}
-                                onChangeText={(text) => setNewActivity({ ...newActivity, calories: text })}
-                                keyboardType="number-pad"
-                                placeholderTextColor={Colors.gray[400]}
-                            />
-                        </View>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Số phút"
+                            value={newActivity.duration}
+                            onChangeText={(text) => setNewActivity({ ...newActivity, duration: text })}
+                            keyboardType="number-pad"
+                            placeholderTextColor={Colors.gray[400]}
+                        />
+                        <Text style={styles.autoCalcHint}>💡 Calo sẽ được tự động tính dựa trên loại hoạt động</Text>
                         <TouchableOpacity onPress={handleAddActivity} style={styles.addButton}>
                             <LinearGradient
                                 colors={Colors.gradient.orange}
@@ -262,21 +276,40 @@ export default function ActivityScreen() {
                     {activities.length === 0 ? (
                         <Text style={styles.emptyText}>Chưa có hoạt động nào</Text>
                     ) : (
-                        activities.map((activity) => (
-                            <View key={activity.id} style={styles.activityItem}>
-                                <View style={styles.activityIcon}>
-                                    <Ionicons name="fitness" size={20} color={Colors.orange[600]} />
+                        activities.map((activity) => {
+                            // Calculate distance based on activity type and duration
+                            let distance = activity.distance || 0;
+                            if (distance === 0 && activity.duration) {
+                                // Estimate distance based on activity type
+                                const activityName = activity.name.toLowerCase();
+                                if (activityName.includes('đi bộ') || activityName.includes('walking')) {
+                                    distance = (activity.duration / 60) * 5; // 5 km/h
+                                } else if (activityName.includes('chạy') || activityName.includes('running')) {
+                                    distance = (activity.duration / 60) * 10; // 10 km/h
+                                } else if (activityName.includes('đạp xe') || activityName.includes('cycling')) {
+                                    distance = (activity.duration / 60) * 20; // 20 km/h
+                                }
+                            }
+
+                            return (
+                                <View key={activity.id} style={styles.activityItem}>
+                                    <View style={styles.activityIcon}>
+                                        <Ionicons name="fitness" size={20} color={Colors.orange[600]} />
+                                    </View>
+                                    <View style={styles.activityInfo}>
+                                        <Text style={styles.activityName}>{activity.name}</Text>
+                                        <Text style={styles.activityTime}>{activity.time}</Text>
+                                    </View>
+                                    <View style={styles.activityStats}>
+                                        <Text style={styles.activityDuration}>{activity.duration} phút</Text>
+                                        {distance > 0 && (
+                                            <Text style={styles.activityDistance}>{distance.toFixed(1)} km</Text>
+                                        )}
+                                        <Text style={styles.activityCalories}>{activity.calories} kcal</Text>
+                                    </View>
                                 </View>
-                                <View style={styles.activityInfo}>
-                                    <Text style={styles.activityName}>{activity.name}</Text>
-                                    <Text style={styles.activityTime}>{activity.time}</Text>
-                                </View>
-                                <View style={styles.activityStats}>
-                                    <Text style={styles.activityDuration}>{activity.duration} phút</Text>
-                                    <Text style={styles.activityCalories}>{activity.calories} kcal</Text>
-                                </View>
-                            </View>
-                        ))
+                            );
+                        })
                     )}
                 </View>
             </View>
@@ -364,6 +397,12 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.gray[50],
         borderRadius: 12,
     },
+    autoCalcHint: {
+        fontSize: 12,
+        color: Colors.gray[600],
+        marginBottom: 12,
+        fontStyle: 'italic',
+    },
     input: {
         height: 48,
         backgroundColor: Colors.white,
@@ -439,8 +478,15 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         color: Colors.gray[900],
     },
+    activityDistance: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: Colors.blue[600],
+        marginTop: 2,
+    },
     activityCalories: {
         fontSize: 12,
         color: Colors.orange[600],
+        marginTop: 2,
     },
 });

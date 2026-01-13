@@ -47,10 +47,15 @@ export default function WelcomeScreen() {
         try {
             console.log('Get Started button pressed!');
             await AsyncStorage.setItem('hasSeenWelcome', 'true');
+            console.log('hasSeenWelcome set to true');
+
+            // Small delay to ensure AsyncStorage is saved
+            await new Promise(resolve => setTimeout(resolve, 100));
+
             console.log('Navigating to sign-in...');
             router.push('/sign-in');
         } catch (error) {
-            console.error('Error:', error);
+            console.error('Error in handleGetStarted:', error);
             router.push('/sign-in');
         }
     };

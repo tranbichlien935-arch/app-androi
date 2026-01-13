@@ -2,17 +2,21 @@ import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 
 export default function ProfileScreen() {
@@ -24,8 +28,10 @@ export default function ProfileScreen() {
         email: '',
         age: 0,
         height: 0,
+        weight: 0,
         gender: '',
         joinDate: '',
+        photo_url: '',
     });
     const [stats, setStats] = useState({
         consecutiveDays: 0,
@@ -43,11 +49,13 @@ export default function ProfileScreen() {
         avgSleep: 0
     });
     const [loading, setLoading] = useState(true);
+    const [uploadingImage, setUploadingImage] = useState(false);
     const [achievements, setAchievements] = useState([]);
     const [tempName, setTempName] = useState('');
     const [tempAge, setTempAge] = useState('');
     const [tempHeight, setTempHeight] = useState('');
     const [tempGender, setTempGender] = useState('');
+    const [tempWeight, setTempWeight] = useState('');
 
     useEffect(() => {
         if (!authLoading && isAuthenticated) {
@@ -81,8 +89,10 @@ export default function ProfileScreen() {
                     email: profile.email || '',
                     age: profile.age || 0,
                     height: profile.height || 0,
+                    weight: profile.weight || 0,
                     gender: profile.gender || 'Chưa cập nhật',
                     joinDate: profile.created_at ? new Date(profile.created_at.seconds * 1000).toLocaleDateString('vi-VN') : '',
+                    photo_url: profile.photo_url || '',
                 });
             }
         } catch (error) {
@@ -186,6 +196,7 @@ export default function ProfileScreen() {
         const name = tempName.trim();
         const age = parseInt(tempAge);
         const height = parseInt(tempHeight);
+        const weight = parseFloat(tempWeight.replace(',', '.'));
 
         if (!name) {
             Alert.alert('Lỗi', 'Vui lòng nhập tên');
@@ -199,38 +210,104 @@ export default function ProfileScreen() {
             Alert.alert('Lỗi', 'Vui lòng nhập chiều cao hợp lệ (1-300cm)');
             return;
         }
+        if (weight && (weight <= 0 || weight > 500)) {
+            Alert.alert('Lỗi', 'Vui lòng nhập cân nặng hợp lệ (1-500kg)');
+            return;
+        }
         if (!tempGender) {
             Alert.alert('Lỗi', 'Vui lòng chọn giới tính');
             return;
         }
 
         try {
-            // Update user profile (including height for BMI calculation)
-            await firebaseApi.updateUserProfile({
+            // Update user profile (including height and weight for BMI calculation)
+            const profileData = {
                 full_name: name,
                 age: age,
                 height: height,
                 gender: tempGender
-            });
+            };
+            if (weight > 0) {
+                profileData.weight = weight;
+            }
+            await firebaseApi.updateUserProfile(profileData);
 
             // Also update height in settings (for weight screen goals)
             await firebaseApi.updateUserSettings({
                 height: height
             });
 
+            // If weight is provided, also save it as a weight log
+            if (weight > 0) {
+                const today = firebaseApi.getTodayDate();
+                await firebaseApi.addWeightLog({
+                    date: today,
+                    weight: weight,
+                });
+            }
+
             setUserInfo(prev => ({
                 ...prev,
                 name: name,
                 age: age,
                 height: height,
+                weight: weight || prev.weight,
                 gender: tempGender
             }));
 
-            setEditMode(false);
+            loadUserProfile();
             Alert.alert('Thành công', 'Đã cập nhật thông tin');
         } catch (error) {
-            console.error('Error saving profile:', error);
-            Alert.alert('Lỗi', 'Không thể lưu thông tin');
+            Alert.alert('Lỗi', error.message || 'Không thể cập nhật thông tin');
+        } finally {
+            setEditMode(false);
+        }
+    };
+
+    const pickImage = async () => {
+        // Check if running on web
+        if (Platform.OS === 'web') {
+            Alert.alert('Không hỗ trợ', 'Chức năng upload ảnh chỉ khả dụng trên ứng dụng di động (iOS/Android)');
+            return;
+        }
+
+        try {
+            // Check if ImagePicker is available
+            if (!ImagePicker || !ImagePicker.requestMediaLibraryPermissionsAsync) {
+                Alert.alert('Lỗi', 'Chức năng này chưa khả dụng. Vui lòng cài đặt expo-image-picker và restart app.');
+                return;
+            }
+
+            // Request permission
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Lỗi', 'Cần cấp quyền truy cập thư viện ảnh');
+                return;
+            }
+
+            // Pick image
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.7,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                setUploadingImage(true);
+                try {
+                    const uploadResult = await firebaseApi.uploadProfilePicture(result.assets[0].uri);
+                    setUserInfo({ ...userInfo, photo_url: uploadResult.url });
+                    Alert.alert('Thành công', 'Đã cập nhật ảnh đại diện');
+                } catch (error) {
+                    Alert.alert('Lỗi', error.message || 'Không thể tải ảnh lên');
+                } finally {
+                    setUploadingImage(false);
+                }
+            }
+        } catch (error) {
+            console.error('Image picker error:', error);
+            Alert.alert('Lỗi', 'Không thể mở thư viện ảnh. Vui lòng cài đặt expo-image-picker và restart app.');
         }
     };
 
@@ -288,7 +365,27 @@ export default function ProfileScreen() {
                 <View style={styles.profileTop}>
                     <View style={styles.profileInfo}>
                         <View style={styles.avatarContainer}>
-                            <Ionicons name="person" size={48} color={Colors.white} />
+                            {userInfo.photo_url ? (
+                                <Image
+                                    source={{ uri: userInfo.photo_url }}
+                                    style={styles.avatar}
+                                    contentFit="cover"
+                                />
+                            ) : (
+                                <Ionicons name="person" size={48} color={Colors.white} />
+                            )}
+                            {uploadingImage && (
+                                <View style={styles.avatarLoading}>
+                                    <ActivityIndicator size="large" color={Colors.white} />
+                                </View>
+                            )}
+                            <TouchableOpacity
+                                style={styles.cameraButton}
+                                onPress={pickImage}
+                                disabled={uploadingImage}
+                            >
+                                <Ionicons name="camera" size={16} color={Colors.white} />
+                            </TouchableOpacity>
                         </View>
                         <View>
                             <Text style={styles.profileName}>{userInfo.name}</Text>
@@ -303,6 +400,7 @@ export default function ProfileScreen() {
                                 setTempName(userInfo.name);
                                 setTempAge(userInfo.age.toString());
                                 setTempHeight(userInfo.height.toString());
+                                setTempWeight(userInfo.weight ? userInfo.weight.toString() : '');
                                 setTempGender(userInfo.gender);
                                 setEditMode(true);
                             }
@@ -350,6 +448,17 @@ export default function ProfileScreen() {
                                         placeholderTextColor="rgba(255,255,255,0.5)"
                                     />
                                 </View>
+                            </View>
+                            <View style={styles.editField}>
+                                <Text style={styles.editLabel}>Cân nặng (kg)</Text>
+                                <TextInput
+                                    style={styles.editInput}
+                                    value={tempWeight}
+                                    onChangeText={setTempWeight}
+                                    placeholder="Cân nặng hiện tại"
+                                    keyboardType="decimal-pad"
+                                    placeholderTextColor="rgba(255,255,255,0.5)"
+                                />
                             </View>
                             <View style={styles.editField}>
                                 <Text style={styles.editLabel}>Giới tính</Text>
@@ -402,6 +511,10 @@ export default function ProfileScreen() {
                                 <Text style={styles.infoUnit}>cm</Text>
                             </View>
                             <View style={styles.infoItem}>
+                                <Text style={styles.infoValue}>{userInfo.weight || '-'}</Text>
+                                <Text style={styles.infoUnit}>kg</Text>
+                            </View>
+                            <View style={styles.infoItem}>
                                 <Text style={styles.infoValue}>{userInfo.gender}</Text>
                                 <Text style={styles.infoUnit}>Giới tính</Text>
                             </View>
@@ -409,22 +522,6 @@ export default function ProfileScreen() {
                     )}
                 </View>
             </LinearGradient>
-
-            {/* Stats Summary */}
-            <View style={styles.statsRow}>
-                <View style={styles.statBox}>
-                    <Text style={styles.statNumber}>{stats.consecutiveDays}</Text>
-                    <Text style={styles.statLabel}>Ngày liên tiếp</Text>
-                </View>
-                <View style={styles.statBox}>
-                    <Text style={styles.statNumber}>{stats.achievementsCount}</Text>
-                    <Text style={styles.statLabel}>Thành tích</Text>
-                </View>
-                <View style={styles.statBox}>
-                    <Text style={styles.statNumber}>{stats.weightLost.toFixed(1)}</Text>
-                    <Text style={styles.statLabel}>kg giảm</Text>
-                </View>
-            </View>
 
             {/* Achievements */}
             <View style={styles.section}>
@@ -636,12 +733,41 @@ const styles = StyleSheet.create({
         gap: 16,
     },
     avatarContainer: {
-        width: 64,
-        height: 64,
-        borderRadius: 16,
+        width: 80,
+        height: 80,
+        borderRadius: 40,
         backgroundColor: 'rgba(255,255,255,0.2)',
         alignItems: 'center',
         justifyContent: 'center',
+        marginRight: 16,
+        borderWidth: 3,
+        borderColor: Colors.white,
+        position: 'relative',
+    },
+    avatar: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+    },
+    avatarLoading: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderRadius: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cameraButton: {
+        position: 'absolute',
+        right: -4,
+        bottom: -4,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: Colors.blue[600],
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: Colors.white,
     },
     profileName: {
         fontSize: 20,
