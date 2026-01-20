@@ -1,7 +1,9 @@
 import QuickAddActivities from '@/components/ui/QuickAddActivities';
+import Toast from '@/components/ui/Toast';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
+import notificationService from '@/services/notification-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from 'expo-router';
@@ -39,6 +41,8 @@ export default function ActivityScreen() {
         name: '',
         duration: '',
     });
+    const [showToast, setShowToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
 
     useEffect(() => {
         if (!authLoading && isAuthenticated) {
@@ -152,168 +156,190 @@ export default function ActivityScreen() {
             setNewActivity({ name: '', duration: '' });
             setShowAddActivity(false);
             loadActivityData();
-            Alert.alert('Thành công', `Đã thêm hoạt động (${calories} kcal)`);
+
+            // Hiển thị notification
+            const notificationResult = await notificationService.showActivityCompletionNotification({
+                activityName: newActivity.name,
+                duration: duration,
+                calories: calories,
+                distance: distance,
+            });
+
+            // Fallback sang Toast nếu notification fail
+            if (!notificationResult.success) {
+                const message = `Hoàn thành ${newActivity.name}! 🎉\n💪 ${calories} kcal${distance > 0 ? ` • 🏃 ${distance.toFixed(1)} km` : ''}`;
+                setToastMessage(message);
+                setShowToast(true);
+            }
         } catch (error) {
             Alert.alert('Lỗi', 'Không thể thêm hoạt động');
         }
     };
 
     return (
-        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-            {/* Header Stats */}
-            <LinearGradient
-                colors={['#f97316', '#dc2626']}
-                style={styles.headerCard}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-            >
-                <Text style={styles.headerTitle}>Tổng hợp hôm nay</Text>
-                <View style={styles.statsContainer}>
-                    <View style={styles.statsRow}>
-                        <View style={styles.statBox}>
-                            <Ionicons name="footsteps" size={20} color={Colors.white} />
-                            <Text style={styles.statValue}>{todayTotal.steps.toLocaleString()}</Text>
-                            <Text style={styles.statLabel}>Bước chân</Text>
+        <>
+            <Toast
+                visible={showToast}
+                message={toastMessage}
+                type="success"
+                onHide={() => setShowToast(false)}
+            />
+            <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+                {/* Header Stats */}
+                <LinearGradient
+                    colors={['#f97316', '#dc2626']}
+                    style={styles.headerCard}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                >
+                    <Text style={styles.headerTitle}>Tổng hợp hôm nay</Text>
+                    <View style={styles.statsContainer}>
+                        <View style={styles.statsRow}>
+                            <View style={styles.statBox}>
+                                <Ionicons name="footsteps" size={20} color={Colors.white} />
+                                <Text style={styles.statValue}>{todayTotal.steps.toLocaleString()}</Text>
+                                <Text style={styles.statLabel}>Bước chân</Text>
+                            </View>
+                            <View style={styles.statBox}>
+                                <Ionicons name="flame" size={20} color={Colors.white} />
+                                <Text style={styles.statValue}>{todayTotal.calories}</Text>
+                                <Text style={styles.statLabel}>kcal</Text>
+                            </View>
                         </View>
-                        <View style={styles.statBox}>
-                            <Ionicons name="flame" size={20} color={Colors.white} />
-                            <Text style={styles.statValue}>{todayTotal.calories}</Text>
-                            <Text style={styles.statLabel}>kcal</Text>
+                        <View style={styles.statsRow}>
+                            <View style={styles.statBox}>
+                                <Ionicons name="navigate" size={20} color={Colors.white} />
+                                <Text style={styles.statValue}>{todayTotal.distance.toFixed(1)}</Text>
+                                <Text style={styles.statLabel}>km</Text>
+                            </View>
+                            <View style={styles.statBox}>
+                                <Ionicons name="time" size={20} color={Colors.white} />
+                                <Text style={styles.statValue}>{todayTotal.activeMinutes}</Text>
+                                <Text style={styles.statLabel}>phút</Text>
+                            </View>
                         </View>
                     </View>
-                    <View style={styles.statsRow}>
-                        <View style={styles.statBox}>
-                            <Ionicons name="navigate" size={20} color={Colors.white} />
-                            <Text style={styles.statValue}>{todayTotal.distance.toFixed(1)}</Text>
-                            <Text style={styles.statLabel}>km</Text>
-                        </View>
-                        <View style={styles.statBox}>
-                            <Ionicons name="time" size={20} color={Colors.white} />
-                            <Text style={styles.statValue}>{todayTotal.activeMinutes}</Text>
-                            <Text style={styles.statLabel}>phút</Text>
-                        </View>
-                    </View>
+                </LinearGradient>
+
+                {/* Quick Add Activities */}
+                <QuickAddActivities onSelectActivity={handleQuickAdd} />
+
+                {/* Weekly Chart */}
+                <View style={styles.card}>
+                    <Text style={styles.cardTitle}>Bước chân tuần này</Text>
+                    <BarChart
+                        data={weeklyStepsData}
+                        width={screenWidth - 64}
+                        height={200}
+                        yAxisLabel=""
+                        yAxisSuffix=""
+                        chartConfig={{
+                            backgroundColor: Colors.white,
+                            backgroundGradientFrom: Colors.white,
+                            backgroundGradientTo: Colors.white,
+                            decimalPlaces: 0,
+                            color: (opacity = 1) => `rgba(249, 115, 22, ${opacity})`,
+                            labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                            style: { borderRadius: 16 },
+                            propsForLabels: { fontSize: 12 },
+                        }}
+                        style={styles.chart}
+                        showValuesOnTopOfBars
+                    />
                 </View>
-            </LinearGradient>
 
-            {/* Quick Add Activities */}
-            <QuickAddActivities onSelectActivity={handleQuickAdd} />
+                {/* Add Activity Form */}
+                <View style={styles.card}>
+                    <View style={styles.cardHeader}>
+                        <Text style={styles.cardTitle}>Thêm hoạt động</Text>
+                        {showAddActivity && (
+                            <TouchableOpacity onPress={() => {
+                                setShowAddActivity(false);
+                                setNewActivity({ name: '', duration: '' });
+                            }}>
+                                <Ionicons name="close-circle" size={28} color={Colors.gray[400]} />
+                            </TouchableOpacity>
+                        )}
+                    </View>
 
-            {/* Weekly Chart */}
-            <View style={styles.card}>
-                <Text style={styles.cardTitle}>Bước chân tuần này</Text>
-                <BarChart
-                    data={weeklyStepsData}
-                    width={screenWidth - 64}
-                    height={200}
-                    yAxisLabel=""
-                    yAxisSuffix=""
-                    chartConfig={{
-                        backgroundColor: Colors.white,
-                        backgroundGradientFrom: Colors.white,
-                        backgroundGradientTo: Colors.white,
-                        decimalPlaces: 0,
-                        color: (opacity = 1) => `rgba(249, 115, 22, ${opacity})`,
-                        labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                        style: { borderRadius: 16 },
-                        propsForLabels: { fontSize: 12 },
-                    }}
-                    style={styles.chart}
-                    showValuesOnTopOfBars
-                />
-            </View>
-
-            {/* Add Activity Form */}
-            <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                    <Text style={styles.cardTitle}>Thêm hoạt động</Text>
                     {showAddActivity && (
-                        <TouchableOpacity onPress={() => {
-                            setShowAddActivity(false);
-                            setNewActivity({ name: '', duration: '' });
-                        }}>
-                            <Ionicons name="close-circle" size={28} color={Colors.gray[400]} />
-                        </TouchableOpacity>
+                        <View style={styles.addForm}>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Tên hoạt động (VD: Đi bộ, Chạy, Đạp xe)"
+                                value={newActivity.name}
+                                onChangeText={(text) => setNewActivity({ ...newActivity, name: text })}
+                                placeholderTextColor={Colors.gray[400]}
+                            />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Số phút"
+                                value={newActivity.duration}
+                                onChangeText={(text) => setNewActivity({ ...newActivity, duration: text })}
+                                keyboardType="number-pad"
+                                placeholderTextColor={Colors.gray[400]}
+                            />
+                            <Text style={styles.autoCalcHint}>💡 Calo sẽ được tự động tính dựa trên loại hoạt động</Text>
+                            <TouchableOpacity onPress={handleAddActivity} style={styles.addButton}>
+                                <LinearGradient
+                                    colors={Colors.gradient.orange}
+                                    style={styles.addButtonGradient}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                >
+                                    <Text style={styles.addButtonText}>Thêm hoạt động</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </View>
                     )}
                 </View>
 
-                {showAddActivity && (
-                    <View style={styles.addForm}>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Tên hoạt động (VD: Đi bộ, Chạy, Đạp xe)"
-                            value={newActivity.name}
-                            onChangeText={(text) => setNewActivity({ ...newActivity, name: text })}
-                            placeholderTextColor={Colors.gray[400]}
-                        />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Số phút"
-                            value={newActivity.duration}
-                            onChangeText={(text) => setNewActivity({ ...newActivity, duration: text })}
-                            keyboardType="number-pad"
-                            placeholderTextColor={Colors.gray[400]}
-                        />
-                        <Text style={styles.autoCalcHint}>💡 Calo sẽ được tự động tính dựa trên loại hoạt động</Text>
-                        <TouchableOpacity onPress={handleAddActivity} style={styles.addButton}>
-                            <LinearGradient
-                                colors={Colors.gradient.orange}
-                                style={styles.addButtonGradient}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                            >
-                                <Text style={styles.addButtonText}>Thêm hoạt động</Text>
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    </View>
-                )}
-            </View>
-
-            {/* Recent Activities */}
-            <View style={styles.card}>
-                <Text style={styles.cardTitle}>Hoạt động gần đây</Text>
-                <View style={styles.activitiesList}>
-                    {activities.length === 0 ? (
-                        <Text style={styles.emptyText}>Chưa có hoạt động nào</Text>
-                    ) : (
-                        activities.map((activity) => {
-                            // Calculate distance based on activity type and duration
-                            let distance = activity.distance || 0;
-                            if (distance === 0 && activity.duration) {
-                                // Estimate distance based on activity type
-                                const activityName = activity.name.toLowerCase();
-                                if (activityName.includes('đi bộ') || activityName.includes('walking')) {
-                                    distance = (activity.duration / 60) * 5; // 5 km/h
-                                } else if (activityName.includes('chạy') || activityName.includes('running')) {
-                                    distance = (activity.duration / 60) * 10; // 10 km/h
-                                } else if (activityName.includes('đạp xe') || activityName.includes('cycling')) {
-                                    distance = (activity.duration / 60) * 20; // 20 km/h
+                {/* Recent Activities */}
+                <View style={styles.card}>
+                    <Text style={styles.cardTitle}>Hoạt động gần đây</Text>
+                    <View style={styles.activitiesList}>
+                        {activities.length === 0 ? (
+                            <Text style={styles.emptyText}>Chưa có hoạt động nào</Text>
+                        ) : (
+                            activities.map((activity) => {
+                                // Calculate distance based on activity type and duration
+                                let distance = activity.distance || 0;
+                                if (distance === 0 && activity.duration) {
+                                    // Estimate distance based on activity type
+                                    const activityName = activity.name.toLowerCase();
+                                    if (activityName.includes('đi bộ') || activityName.includes('walking')) {
+                                        distance = (activity.duration / 60) * 5; // 5 km/h
+                                    } else if (activityName.includes('chạy') || activityName.includes('running')) {
+                                        distance = (activity.duration / 60) * 10; // 10 km/h
+                                    } else if (activityName.includes('đạp xe') || activityName.includes('cycling')) {
+                                        distance = (activity.duration / 60) * 20; // 20 km/h
+                                    }
                                 }
-                            }
 
-                            return (
-                                <View key={activity.id} style={styles.activityItem}>
-                                    <View style={styles.activityIcon}>
-                                        <Ionicons name="fitness" size={20} color={Colors.orange[600]} />
+                                return (
+                                    <View key={activity.id} style={styles.activityItem}>
+                                        <View style={styles.activityIcon}>
+                                            <Ionicons name="fitness" size={20} color={Colors.orange[600]} />
+                                        </View>
+                                        <View style={styles.activityInfo}>
+                                            <Text style={styles.activityName}>{activity.name}</Text>
+                                            <Text style={styles.activityTime}>{activity.time}</Text>
+                                        </View>
+                                        <View style={styles.activityStats}>
+                                            <Text style={styles.activityDuration}>{activity.duration} phút</Text>
+                                            {distance > 0 && (
+                                                <Text style={styles.activityDistance}>{distance.toFixed(1)} km</Text>
+                                            )}
+                                            <Text style={styles.activityCalories}>{activity.calories} kcal</Text>
+                                        </View>
                                     </View>
-                                    <View style={styles.activityInfo}>
-                                        <Text style={styles.activityName}>{activity.name}</Text>
-                                        <Text style={styles.activityTime}>{activity.time}</Text>
-                                    </View>
-                                    <View style={styles.activityStats}>
-                                        <Text style={styles.activityDuration}>{activity.duration} phút</Text>
-                                        {distance > 0 && (
-                                            <Text style={styles.activityDistance}>{distance.toFixed(1)} km</Text>
-                                        )}
-                                        <Text style={styles.activityCalories}>{activity.calories} kcal</Text>
-                                    </View>
-                                </View>
-                            );
-                        })
-                    )}
+                                );
+                            })
+                        )}
+                    </View>
                 </View>
-            </View>
-        </ScrollView>
+            </ScrollView>
+        </>
     );
 }
 
