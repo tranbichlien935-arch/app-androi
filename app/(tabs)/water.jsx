@@ -1,9 +1,11 @@
 import WeeklyWaterChart from '@/components/charts/WeeklyWaterChart';
 import DailyGoalCard from '@/components/ui/DailyGoalCard';
+import Toast from '@/components/ui/Toast';
 import WaterReminders from '@/components/ui/WaterReminders';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
+import notificationService from '@/services/notification-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from 'expo-router';
@@ -26,6 +28,8 @@ export default function WaterScreen() {
 
     // Weekly data
     const [weeklyData, setWeeklyData] = useState([]);
+    const [showToast, setShowToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
     const [reminders, setReminders] = useState([]);
 
     useEffect(() => {
@@ -107,7 +111,25 @@ export default function WaterScreen() {
                 time: now,
             });
 
-            setWaterIntake(prev => prev + amount);
+            const newWaterIntake = waterIntake + amount;
+            setWaterIntake(newWaterIntake);
+
+            // Kiểm tra nếu đạt mục tiêu
+            const percentage = (newWaterIntake / dailyGoal) * 100;
+            if (newWaterIntake >= dailyGoal && waterIntake < dailyGoal) {
+                // Lần đầu đạt goal
+                const notificationResult = await notificationService.showWaterGoalAchievedNotification({
+                    amount: newWaterIntake,
+                    goal: dailyGoal,
+                    percentage: percentage,
+                });
+
+                // Fallback nếu notification fail
+                if (!notificationResult.success) {
+                    setToastMessage(`Tuyệt vời! 💧\nĐã hoàn thành mục tiêu ${dailyGoal}ml!`);
+                    setShowToast(true);
+                }
+            }
         } catch (error) {
             Alert.alert('Lỗi', 'Không thể thêm nước');
         }
@@ -143,126 +165,134 @@ export default function WaterScreen() {
     const totalGlasses = Math.ceil(dailyGoal / glassSize);
 
     return (
-        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-            {/* Main Water Tracker */}
-            <LinearGradient
-                colors={['#3b82f6', '#06b6d4']}
-                style={styles.headerCard}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-            >
-                <View style={styles.headerTitle}>
-                    <Ionicons name="water" size={24} color={Colors.white} />
-                    <Text style={styles.headerText}>Lượng nước hôm nay</Text>
-                </View>
+        <>
+            <Toast
+                visible={showToast}
+                message={toastMessage}
+                type="success"
+                onHide={() => setShowToast(false)}
+            />
+            <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+                {/* Main Water Tracker */}
+                <LinearGradient
+                    colors={['#3b82f6', '#06b6d4']}
+                    style={styles.headerCard}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                >
+                    <View style={styles.headerTitle}>
+                        <Ionicons name="water" size={24} color={Colors.white} />
+                        <Text style={styles.headerText}>Lượng nước hôm nay</Text>
+                    </View>
 
-                {/* Water Amount Display */}
-                <View style={styles.waterDisplay}>
-                    <Text style={styles.waterAmount}>{waterIntake}</Text>
-                    <Text style={styles.waterUnit}>ml / {dailyGoal} ml</Text>
-                    <Text style={styles.waterPercentage}>{Math.round(percentage)}%</Text>
-                </View>
+                    {/* Water Amount Display */}
+                    <View style={styles.waterDisplay}>
+                        <Text style={styles.waterAmount}>{waterIntake}</Text>
+                        <Text style={styles.waterUnit}>ml / {dailyGoal} ml</Text>
+                        <Text style={styles.waterPercentage}>{Math.round(percentage)}%</Text>
+                    </View>
 
-                {/* Quick Actions */}
-                <View style={styles.quickActions}>
-                    <TouchableOpacity
-                        onPress={() => addWater(100)}
-                        style={styles.actionButton}
-                    >
-                        <Text style={styles.actionText}>+100ml</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => addWater(200)}
-                        style={styles.actionButton}
-                    >
-                        <Text style={styles.actionText}>+200ml</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => addWater(300)}
-                        style={styles.actionButton}
-                    >
-                        <Text style={styles.actionText}>+300ml</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => addWater(100)}
-                        style={styles.actionButton}
-                    >
-                        <Text style={styles.actionText}>+100ml</Text>
-                    </TouchableOpacity>
-                </View>
-            </LinearGradient>
+                    {/* Quick Actions */}
+                    <View style={styles.quickActions}>
+                        <TouchableOpacity
+                            onPress={() => addWater(100)}
+                            style={styles.actionButton}
+                        >
+                            <Text style={styles.actionText}>+100ml</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => addWater(200)}
+                            style={styles.actionButton}
+                        >
+                            <Text style={styles.actionText}>+200ml</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => addWater(300)}
+                            style={styles.actionButton}
+                        >
+                            <Text style={styles.actionText}>+300ml</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => addWater(100)}
+                            style={styles.actionButton}
+                        >
+                            <Text style={styles.actionText}>+100ml</Text>
+                        </TouchableOpacity>
+                    </View>
+                </LinearGradient>
 
-            {/* Glass Counter */}
-            <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                    <Ionicons name="water" size={20} color={Colors.blue[600]} />
-                    <Text style={styles.cardTitle}>Ly nước đã uống</Text>
-                </View>
-                <View style={styles.glassGrid}>
-                    {Array.from({ length: totalGlasses }).map((_, index) => {
-                        const isFilled = index < glassCount;
-                        return (
-                            <View
-                                key={index}
-                                style={[
-                                    styles.glass,
-                                    isFilled && styles.glassFilled,
-                                ]}
-                            >
-                                {isFilled ? (
-                                    <LinearGradient
-                                        colors={['#3b82f6', '#06b6d4']}
-                                        style={styles.waterDrop}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 1 }}
-                                    >
+                {/* Glass Counter */}
+                <View style={styles.card}>
+                    <View style={styles.cardHeader}>
+                        <Ionicons name="water" size={20} color={Colors.blue[600]} />
+                        <Text style={styles.cardTitle}>Ly nước đã uống</Text>
+                    </View>
+                    <View style={styles.glassGrid}>
+                        {Array.from({ length: totalGlasses }).map((_, index) => {
+                            const isFilled = index < glassCount;
+                            return (
+                                <View
+                                    key={index}
+                                    style={[
+                                        styles.glass,
+                                        isFilled && styles.glassFilled,
+                                    ]}
+                                >
+                                    {isFilled ? (
+                                        <LinearGradient
+                                            colors={['#3b82f6', '#06b6d4']}
+                                            style={styles.waterDrop}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 1 }}
+                                        >
+                                            <Ionicons
+                                                name="water"
+                                                size={24}
+                                                color={Colors.white}
+                                            />
+                                        </LinearGradient>
+                                    ) : (
                                         <Ionicons
                                             name="water"
                                             size={24}
-                                            color={Colors.white}
+                                            color={Colors.gray[300]}
                                         />
-                                    </LinearGradient>
-                                ) : (
-                                    <Ionicons
-                                        name="water"
-                                        size={24}
-                                        color={Colors.gray[300]}
-                                    />
-                                )}
-                            </View>
-                        );
-                    })}
+                                    )}
+                                </View>
+                            );
+                        })}
+                    </View>
+                    <Text style={styles.glassCount}>
+                        {glassCount} / {totalGlasses} ly
+                    </Text>
                 </View>
-                <Text style={styles.glassCount}>
-                    {glassCount} / {totalGlasses} ly
-                </Text>
-            </View>
 
-            {/* Weekly Water Chart */}
-            <WeeklyWaterChart weeklyData={weeklyData} />
+                {/* Weekly Water Chart */}
+                <WeeklyWaterChart weeklyData={weeklyData} />
 
-            {/* Daily Goal Card */}
-            <DailyGoalCard
-                dailyGoal={dailyGoal}
-                onGoalChange={handleGoalChange}
-            />
+                {/* Daily Goal Card */}
+                <DailyGoalCard
+                    dailyGoal={dailyGoal}
+                    onGoalChange={handleGoalChange}
+                />
 
-            {/* Water Reminders */}
-            <WaterReminders
-                reminders={reminders}
-                onToggle={handleReminderToggle}
-            />
+                {/* Water Reminders */}
+                <WaterReminders
+                    reminders={reminders}
+                    onToggle={handleReminderToggle}
+                />
 
-            {/* Tips */}
-            <View style={styles.tipsCard}>
-                <Text style={styles.tipsTitle}>💧 Lợi ích của việc uống đủ nước</Text>
-                <Text style={styles.tipsText}>
-                    • Cải thiện năng lượng và tập trung{'\n'}
-                    • Hỗ trợ tiêu hóa và giảm cân{'\n'}
-                    • Làm đẹp da và chống lão hóa
-                </Text>
-            </View>
-        </ScrollView>
+                {/* Tips */}
+                <View style={styles.tipsCard}>
+                    <Text style={styles.tipsTitle}>💧 Lợi ích của việc uống đủ nước</Text>
+                    <Text style={styles.tipsText}>
+                        • Cải thiện năng lượng và tập trung{'\n'}
+                        • Hỗ trợ tiêu hóa và giảm cân{'\n'}
+                        • Làm đẹp da và chống lão hóa
+                    </Text>
+                </View>
+            </ScrollView>
+        </>
     );
 }
 

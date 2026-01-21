@@ -1,10 +1,12 @@
 import SleepStagesChart from '@/components/charts/SleepStagesChart';
 import WeeklySleepChart from '@/components/charts/WeeklySleepChart';
 import SleepSchedule from '@/components/ui/SleepSchedule';
+import Toast from '@/components/ui/Toast';
 import WeeklyAverageCards from '@/components/ui/WeeklyAverageCards';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
+import notificationService from '@/services/notification-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from 'expo-router';
@@ -34,6 +36,8 @@ export default function SleepScreen() {
     const [deepSleep, setDeepSleep] = useState(0);
     const [lightSleep, setLightSleep] = useState(0);
     const [remSleep, setRemSleep] = useState(0);
+    const [showToast, setShowToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
 
     useEffect(() => {
         if (!authLoading && isAuthenticated) {
@@ -134,94 +138,117 @@ export default function SleepScreen() {
             });
 
             setTotalHours(hours);
-            Alert.alert('Thành công', 'Đã lưu dữ liệu giấc ngủ');
+
+            // Hiển thị notification
+            const notificationResult = await notificationService.showSleepGoalAchievedNotification({
+                hours: hours,
+                quality: quality,
+            });
+
+            // Fallback nếu notification fail
+            if (!notificationResult.success) {
+                let message = `Đã lưu giấc ngủ! 🌙\n${hours.toFixed(1)} giờ`;
+                if (quality > 0) {
+                    message += ` • ${quality}% chất lượng`;
+                }
+                setToastMessage(message);
+                setShowToast(true);
+            }
         } catch (error) {
             Alert.alert('Lỗi', 'Không thể lưu dữ liệu');
         }
     };
 
     return (
-        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-            <LinearGradient
-                colors={['#6366f1', '#8b5cf6']}
-                style={styles.headerCard}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-            >
-                <View style={styles.headerTitle}>
-                    <Ionicons name="moon" size={24} color={Colors.white} />
-                    <Text style={styles.headerText}>Giấc ngủ đêm qua</Text>
-                </View>
-
-                <View style={styles.sleepSummary}>
-                    <Text style={styles.sleepHours}>{totalHours.toFixed(1)}h</Text>
-                    <Text style={styles.sleepLabel}>Tổng thời gian ngủ</Text>
-                </View>
-
-                <View style={styles.qualityBar}>
-                    <Text style={styles.qualityLabel}>Chất lượng: {quality}%</Text>
-                    <View style={styles.qualityBarBg}>
-                        <View style={[styles.qualityBarFill, { width: `${quality}%` }]} />
-                    </View>
-                </View>
-
-                <View style={styles.timesGrid}>
-                    <View style={styles.timeItem}>
-                        <Text style={styles.timeLabel}>Đi ngủ</Text>
-                        <TextInput
-                            style={styles.timeInput}
-                            value={bedTime}
-                            onChangeText={setBedTime}
-                            placeholder="23:00"
-                            placeholderTextColor="rgba(255,255,255,0.5)"
-                        />
-                    </View>
-                    <View style={styles.timeItem}>
-                        <Text style={styles.timeLabel}>Thức dậy</Text>
-                        <TextInput
-                            style={styles.timeInput}
-                            value={wakeTime}
-                            onChangeText={setWakeTime}
-                            placeholder="07:00"
-                            placeholderTextColor="rgba(255,255,255,0.5)"
-                        />
-                    </View>
-                </View>
-
-                <TouchableOpacity onPress={saveSleepData} style={styles.saveButton}>
-                    <Text style={styles.saveButtonText}>Lưu dữ liệu</Text>
-                </TouchableOpacity>
-            </LinearGradient>
-
-            {/* Sleep Stages Chart */}
-            <SleepStagesChart
-                deepSleep={deepSleep}
-                lightSleep={lightSleep}
-                remSleep={remSleep}
+        <>
+            <Toast
+                visible={showToast}
+                message={toastMessage}
+                type="success"
+                onHide={() => setShowToast(false)}
             />
+            <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+                <LinearGradient
+                    colors={['#6366f1', '#8b5cf6']}
+                    style={styles.headerCard}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                >
+                    <View style={styles.headerTitle}>
+                        <Ionicons name="moon" size={24} color={Colors.white} />
+                        <Text style={styles.headerText}>Giấc ngủ đêm qua</Text>
+                    </View>
 
-            {/* Weekly Sleep Chart */}
-            <WeeklySleepChart weeklyData={weeklyData} />
+                    <View style={styles.sleepSummary}>
+                        <Text style={styles.sleepHours}>{totalHours.toFixed(1)}h</Text>
+                        <Text style={styles.sleepLabel}>Tổng thời gian ngủ</Text>
+                    </View>
 
-            {/* Sleep Schedule */}
-            <SleepSchedule bedTime={bedTime} wakeTime={wakeTime} />
+                    <View style={styles.qualityBar}>
+                        <Text style={styles.qualityLabel}>Chất lượng: {quality}%</Text>
+                        <View style={styles.qualityBarBg}>
+                            <View style={[styles.qualityBarFill, { width: `${quality}%` }]} />
+                        </View>
+                    </View>
 
-            {/* Weekly Average Cards */}
-            <WeeklyAverageCards
-                averageHours={averageHours}
-                averageQuality={averageQuality}
-            />
+                    <View style={styles.timesGrid}>
+                        <View style={styles.timeItem}>
+                            <Text style={styles.timeLabel}>Đi ngủ</Text>
+                            <TextInput
+                                style={styles.timeInput}
+                                value={bedTime}
+                                onChangeText={setBedTime}
+                                placeholder="23:00"
+                                placeholderTextColor="rgba(255,255,255,0.5)"
+                            />
+                        </View>
+                        <View style={styles.timeItem}>
+                            <Text style={styles.timeLabel}>Thức dậy</Text>
+                            <TextInput
+                                style={styles.timeInput}
+                                value={wakeTime}
+                                onChangeText={setWakeTime}
+                                placeholder="07:00"
+                                placeholderTextColor="rgba(255,255,255,0.5)"
+                            />
+                        </View>
+                    </View>
 
-            {/* Tips */}
-            <View style={styles.tipsCard}>
-                <Text style={styles.tipsTitle}>🌙 Mẹo ngủ ngon</Text>
-                <Text style={styles.tipsText}>
-                    • Ngủ đủ 7-9 giờ mỗi đêm{'\n'}
-                    • Tránh caffeine sau 14h{'\n'}
-                    • Tắt điện thoại trước khi ngủ 30 phút
-                </Text>
-            </View>
-        </ScrollView>
+                    <TouchableOpacity onPress={saveSleepData} style={styles.saveButton}>
+                        <Text style={styles.saveButtonText}>Lưu dữ liệu</Text>
+                    </TouchableOpacity>
+                </LinearGradient>
+
+                {/* Sleep Stages Chart */}
+                <SleepStagesChart
+                    deepSleep={deepSleep}
+                    lightSleep={lightSleep}
+                    remSleep={remSleep}
+                />
+
+                {/* Weekly Sleep Chart */}
+                <WeeklySleepChart weeklyData={weeklyData} />
+
+                {/* Sleep Schedule */}
+                <SleepSchedule bedTime={bedTime} wakeTime={wakeTime} />
+
+                {/* Weekly Average Cards */}
+                <WeeklyAverageCards
+                    averageHours={averageHours}
+                    averageQuality={averageQuality}
+                />
+
+                {/* Tips */}
+                <View style={styles.tipsCard}>
+                    <Text style={styles.tipsTitle}>🌙 Mẹo ngủ ngon</Text>
+                    <Text style={styles.tipsText}>
+                        • Ngủ đủ 7-9 giờ mỗi đêm{'\n'}
+                        • Tránh caffeine sau 14h{'\n'}
+                        • Tắt điện thoại trước khi ngủ 30 phút
+                    </Text>
+                </View>
+            </ScrollView>
+        </>
     );
 }
 

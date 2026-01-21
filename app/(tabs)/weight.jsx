@@ -1,10 +1,12 @@
 import WeightChart from '@/components/charts/WeightChart';
 import BMIIndicator from '@/components/ui/BMIIndicator';
 import MilestoneTimeline from '@/components/ui/MilestoneTimeline';
+import Toast from '@/components/ui/Toast';
 import WeightStatistics from '@/components/ui/WeightStatistics';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import firebaseApi from '@/services/firebase-api';
+import notificationService from '@/services/notification-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from 'expo-router';
@@ -42,6 +44,8 @@ export default function WeightScreen() {
         remaining: 0,
     });
     const [milestones, setMilestones] = useState([]);
+    const [showToast, setShowToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
 
     useEffect(() => {
         if (!authLoading && isAuthenticated) {
@@ -176,16 +180,50 @@ export default function WeightScreen() {
         try {
             const today = firebaseApi.getTodayDate();
 
+            // Lưu trọng lượng cũ để tính change
+            const previousWeight = currentWeight;
+
             await firebaseApi.addWeightLog({
                 date: today,
                 weight: weight,
             });
 
             setNewWeight('');
-            Alert.alert('Thành công', `Đã lưu cân nặng: ${weight}kg`);
 
             // Reload all data to get fresh values
             await loadWeightData();
+
+            // Tính weight change
+            const weightChange = previousWeight > 0 ? weight - previousWeight : 0;
+
+            // Hiển thị notification
+            const notificationResult = await notificationService.showWeightSavedNotification({
+                weight: weight,
+                change: weightChange,
+            });
+
+            // Fallback nếu notification fail
+            if (!notificationResult.success) {
+                const changeText = weightChange !== 0 ? ` • ${weightChange > 0 ? '+' : ''}${weightChange.toFixed(1)}kg` : '';
+                setToastMessage(`Đã ghi nhận! ⚖️\nCân nặng: ${weight}kg${changeText}`);
+                setShowToast(true);
+            }
+
+            // Kiểm tra milestone (mỗi 2kg)
+            if (startWeight > 0 && targetWeight > 0) {
+                const totalLoss = startWeight - weight;
+                const milestoneReached = Math.floor(Math.abs(totalLoss) / 2) * 2;
+                const previousMilestone = previousWeight > 0 ? Math.floor(Math.abs(startWeight - previousWeight) / 2) * 2 : 0;
+
+                // Nếu vừa đạt milestone mới
+                if (milestoneReached > previousMilestone && milestoneReached > 0) {
+                    const targetMilestoneWeight = startWeight - milestoneReached;
+                    await notificationService.showWeightMilestoneNotification({
+                        milestone: targetMilestoneWeight,
+                        totalLoss: totalLoss,
+                    });
+                }
+            }
         } catch (error) {
             console.error('Error saving weight:', error);
             Alert.alert('Lỗi', `Không thể lưu cân nặng: ${error.message}`);
@@ -265,209 +303,217 @@ export default function WeightScreen() {
     }
 
     return (
-        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-            <LinearGradient
-                colors={['#22c55e', '#10b981']}
-                style={styles.headerCard}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-            >
-                <View style={styles.headerTitle}>
-                    <Ionicons name="scale" size={24} color={Colors.white} />
-                    <Text style={styles.headerText}>Cân nặng hiện tại</Text>
-                </View>
+        <>
+            <Toast
+                visible={showToast}
+                message={toastMessage}
+                type="success"
+                onHide={() => setShowToast(false)}
+            />
+            <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+                <LinearGradient
+                    colors={['#22c55e', '#10b981']}
+                    style={styles.headerCard}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                >
+                    <View style={styles.headerTitle}>
+                        <Ionicons name="scale" size={24} color={Colors.white} />
+                        <Text style={styles.headerText}>Cân nặng hiện tại</Text>
+                    </View>
 
-                <View style={styles.weightDisplay}>
-                    <Text style={styles.weightValue}>{currentWeight || 0}</Text>
-                    <Text style={styles.weightUnit}>kg</Text>
-                </View>
+                    <View style={styles.weightDisplay}>
+                        <Text style={styles.weightValue}>{currentWeight || 0}</Text>
+                        <Text style={styles.weightUnit}>kg</Text>
+                    </View>
 
-                {/* Weight Change Indicator */}
-                {currentWeight > 0 && startWeight > 0 && (
-                    <View style={styles.weightChangeContainer}>
-                        <Ionicons
-                            name={weightChange.isGaining ? "trending-up" : "trending-down"}
-                            size={16}
-                            color={weightChange.isGaining ? "#fbbf24" : "#10b981"}
-                        />
-                        <Text style={[
-                            styles.weightChangeText,
-                            { color: weightChange.isGaining ? "#fbbf24" : "#10b981" }
-                        ]}>
-                            {weightChange.text} từ khi bắt đầu
+                    {/* Weight Change Indicator */}
+                    {currentWeight > 0 && startWeight > 0 && (
+                        <View style={styles.weightChangeContainer}>
+                            <Ionicons
+                                name={weightChange.isGaining ? "trending-up" : "trending-down"}
+                                size={16}
+                                color={weightChange.isGaining ? "#fbbf24" : "#10b981"}
+                            />
+                            <Text style={[
+                                styles.weightChangeText,
+                                { color: weightChange.isGaining ? "#fbbf24" : "#10b981" }
+                            ]}>
+                                {weightChange.text} từ khi bắt đầu
+                            </Text>
+                        </View>
+                    )}
+
+                    <View style={styles.progressSection}>
+                        <View style={styles.progressHeader}>
+                            <Text style={styles.progressLabel}>Tiến độ</Text>
+                            <Text style={styles.progressValue}>{Math.round(progress)}%</Text>
+                        </View>
+                        <View style={styles.progressBarBg}>
+                            <View style={[styles.progressBarFill, { width: `${Math.min(progress, 100)}%` }]} />
+                        </View>
+                        <View style={styles.progressLabels}>
+                            <Text style={styles.progressText}>Bắt đầu: {startWeight}kg</Text>
+                            <Text style={styles.progressText}>Mục tiêu: {targetWeight}kg</Text>
+                        </View>
+                    </View>
+                </LinearGradient>
+
+                {/* Empty State */}
+                {currentWeight === 0 && (
+                    <View style={styles.emptyState}>
+                        <View style={styles.emptyStateIcon}>
+                            <Ionicons name="scale-outline" size={64} color={Colors.gray[300]} />
+                        </View>
+                        <Text style={styles.emptyStateTitle}>Chưa có dữ liệu cân nặng</Text>
+                        <Text style={styles.emptyStateText}>
+                            Thêm cân nặng để xem biểu đồ
                         </Text>
+                        <View style={styles.emptyStateTips}>
+                            <Text style={styles.emptyStateTipTitle}>💡 Cách thêm cân nặng:</Text>
+                            <Text style={styles.emptyStateTip}>• Nhập ở mục "Cập nhật cân nặng" bên dưới</Text>
+                            <Text style={styles.emptyStateTip}>• Hoặc cập nhật từ trang Hồ sơ</Text>
+                        </View>
                     </View>
                 )}
 
-                <View style={styles.progressSection}>
-                    <View style={styles.progressHeader}>
-                        <Text style={styles.progressLabel}>Tiến độ</Text>
-                        <Text style={styles.progressValue}>{Math.round(progress)}%</Text>
-                    </View>
-                    <View style={styles.progressBarBg}>
-                        <View style={[styles.progressBarFill, { width: `${Math.min(progress, 100)}%` }]} />
-                    </View>
-                    <View style={styles.progressLabels}>
-                        <Text style={styles.progressText}>Bắt đầu: {startWeight}kg</Text>
-                        <Text style={styles.progressText}>Mục tiêu: {targetWeight}kg</Text>
-                    </View>
-                </View>
-            </LinearGradient>
-
-            {/* Empty State */}
-            {currentWeight === 0 && (
-                <View style={styles.emptyState}>
-                    <View style={styles.emptyStateIcon}>
-                        <Ionicons name="scale-outline" size={64} color={Colors.gray[300]} />
-                    </View>
-                    <Text style={styles.emptyStateTitle}>Chưa có dữ liệu cân nặng</Text>
-                    <Text style={styles.emptyStateText}>
-                        Thêm cân nặng để xem biểu đồ
-                    </Text>
-                    <View style={styles.emptyStateTips}>
-                        <Text style={styles.emptyStateTipTitle}>💡 Cách thêm cân nặng:</Text>
-                        <Text style={styles.emptyStateTip}>• Nhập ở mục "Cập nhật cân nặng" bên dưới</Text>
-                        <Text style={styles.emptyStateTip}>• Hoặc cập nhật từ trang Hồ sơ</Text>
-                    </View>
-                </View>
-            )}
-
-            {/* Weight Chart - Only show when have data */}
-            {currentWeight > 0 && (
-                <WeightChart
-                    data={chartData}
-                    startWeight={startWeight}
-                    targetWeight={targetWeight}
-                />
-            )}
-
-            {/* BMI Indicator */}
-            <BMIIndicator bmi={displayBMI} height={height} />
-
-            {/* Statistics */}
-            {currentWeight > 0 && (
-                <WeightStatistics statistics={statistics} />
-            )}
-
-            {/* Milestones */}
-            {milestones.length > 0 && (
-                <MilestoneTimeline milestones={milestones} />
-            )}
-
-            {/* Add Weight - Moved to top for better UX */}
-            <View style={styles.card}>
-                <Text style={styles.cardTitle}>Cập nhật cân nặng</Text>
-                <View style={styles.inputRow}>
-                    <TextInput
-                        style={styles.input}
-                        value={newWeight}
-                        onChangeText={setNewWeight}
-                        placeholder="Nhập cân nặng (kg)"
-                        keyboardType="decimal-pad"
-                        placeholderTextColor={Colors.gray[400]}
+                {/* Weight Chart - Only show when have data */}
+                {currentWeight > 0 && (
+                    <WeightChart
+                        data={chartData}
+                        startWeight={startWeight}
+                        targetWeight={targetWeight}
                     />
-                    <TouchableOpacity onPress={saveWeight} style={styles.addButton}>
-                        <LinearGradient
-                            colors={Colors.gradient.green}
-                            style={styles.addButtonGradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                        >
-                            <Ionicons name="add" size={24} color={Colors.white} />
-                        </LinearGradient>
-                    </TouchableOpacity>
-                </View>
-            </View>
+                )}
 
-            {/* Settings Card */}
-            <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                    <Text style={styles.cardTitle}>Cài đặt mục tiêu</Text>
-                    <TouchableOpacity onPress={() => {
-                        if (editingSettings) {
-                            setEditingSettings(false);
-                        } else {
-                            setTempTarget(targetWeight.toString());
-                            setTempStart(startWeight.toString());
-                            setEditingSettings(true);
-                        }
-                    }}>
-                        <Ionicons
-                            name={editingSettings ? "close" : "create-outline"}
-                            size={24}
-                            color={Colors.green[600]}
+                {/* BMI Indicator */}
+                <BMIIndicator bmi={displayBMI} height={height} />
+
+                {/* Statistics */}
+                {currentWeight > 0 && (
+                    <WeightStatistics statistics={statistics} />
+                )}
+
+                {/* Milestones */}
+                {milestones.length > 0 && (
+                    <MilestoneTimeline milestones={milestones} />
+                )}
+
+                {/* Add Weight - Moved to top for better UX */}
+                <View style={styles.card}>
+                    <Text style={styles.cardTitle}>Cập nhật cân nặng</Text>
+                    <View style={styles.inputRow}>
+                        <TextInput
+                            style={styles.input}
+                            value={newWeight}
+                            onChangeText={setNewWeight}
+                            placeholder="Nhập cân nặng (kg)"
+                            keyboardType="decimal-pad"
+                            placeholderTextColor={Colors.gray[400]}
                         />
-                    </TouchableOpacity>
-                </View>
-
-                {editingSettings ? (
-                    <View style={styles.settingsForm}>
-                        <View style={styles.settingItem}>
-                            <Text style={styles.settingLabel}>Cân nặng ban đầu (kg)</Text>
-                            <TextInput
-                                style={styles.settingInput}
-                                value={tempStart}
-                                onChangeText={setTempStart}
-                                placeholder="70"
-                                keyboardType="decimal-pad"
-                                placeholderTextColor={Colors.gray[400]}
-                            />
-                        </View>
-                        <View style={styles.settingItem}>
-                            <Text style={styles.settingLabel}>Cân nặng mục tiêu (kg)</Text>
-                            <TextInput
-                                style={styles.settingInput}
-                                value={tempTarget}
-                                onChangeText={setTempTarget}
-                                placeholder="65"
-                                keyboardType="decimal-pad"
-                                placeholderTextColor={Colors.gray[400]}
-                            />
-                        </View>
-                        <TouchableOpacity onPress={saveSettings} style={styles.saveSettingsButton}>
+                        <TouchableOpacity onPress={saveWeight} style={styles.addButton}>
                             <LinearGradient
                                 colors={Colors.gradient.green}
-                                style={styles.saveSettingsGradient}
+                                style={styles.addButtonGradient}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 0 }}
                             >
-                                <Text style={styles.saveSettingsText}>Lưu cài đặt</Text>
+                                <Ionicons name="add" size={24} color={Colors.white} />
                             </LinearGradient>
                         </TouchableOpacity>
                     </View>
-                ) : (
-                    <View style={styles.settingsDisplay}>
-                        <View style={styles.settingRow}>
-                            <Text style={styles.settingDisplayLabel}>Chiều cao:</Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <Text style={styles.settingDisplayValue}>{height} cm</Text>
-                                <Text style={[styles.settingDisplayLabel, { fontSize: 12, fontStyle: 'italic' }]}>
-                                    (Sửa ở Profile)
-                                </Text>
+                </View>
+
+                {/* Settings Card */}
+                <View style={styles.card}>
+                    <View style={styles.cardHeader}>
+                        <Text style={styles.cardTitle}>Cài đặt mục tiêu</Text>
+                        <TouchableOpacity onPress={() => {
+                            if (editingSettings) {
+                                setEditingSettings(false);
+                            } else {
+                                setTempTarget(targetWeight.toString());
+                                setTempStart(startWeight.toString());
+                                setEditingSettings(true);
+                            }
+                        }}>
+                            <Ionicons
+                                name={editingSettings ? "close" : "create-outline"}
+                                size={24}
+                                color={Colors.green[600]}
+                            />
+                        </TouchableOpacity>
+                    </View>
+
+                    {editingSettings ? (
+                        <View style={styles.settingsForm}>
+                            <View style={styles.settingItem}>
+                                <Text style={styles.settingLabel}>Cân nặng ban đầu (kg)</Text>
+                                <TextInput
+                                    style={styles.settingInput}
+                                    value={tempStart}
+                                    onChangeText={setTempStart}
+                                    placeholder="70"
+                                    keyboardType="decimal-pad"
+                                    placeholderTextColor={Colors.gray[400]}
+                                />
+                            </View>
+                            <View style={styles.settingItem}>
+                                <Text style={styles.settingLabel}>Cân nặng mục tiêu (kg)</Text>
+                                <TextInput
+                                    style={styles.settingInput}
+                                    value={tempTarget}
+                                    onChangeText={setTempTarget}
+                                    placeholder="65"
+                                    keyboardType="decimal-pad"
+                                    placeholderTextColor={Colors.gray[400]}
+                                />
+                            </View>
+                            <TouchableOpacity onPress={saveSettings} style={styles.saveSettingsButton}>
+                                <LinearGradient
+                                    colors={Colors.gradient.green}
+                                    style={styles.saveSettingsGradient}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                >
+                                    <Text style={styles.saveSettingsText}>Lưu cài đặt</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <View style={styles.settingsDisplay}>
+                            <View style={styles.settingRow}>
+                                <Text style={styles.settingDisplayLabel}>Chiều cao:</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                    <Text style={styles.settingDisplayValue}>{height} cm</Text>
+                                    <Text style={[styles.settingDisplayLabel, { fontSize: 12, fontStyle: 'italic' }]}>
+                                        (Sửa ở Profile)
+                                    </Text>
+                                </View>
+                            </View>
+                            <View style={styles.settingRow}>
+                                <Text style={styles.settingDisplayLabel}>Cân nặng ban đầu:</Text>
+                                <Text style={styles.settingDisplayValue}>{startWeight} kg</Text>
+                            </View>
+                            <View style={styles.settingRow}>
+                                <Text style={styles.settingDisplayLabel}>Cân nặng mục tiêu:</Text>
+                                <Text style={styles.settingDisplayValue}>{targetWeight} kg</Text>
                             </View>
                         </View>
-                        <View style={styles.settingRow}>
-                            <Text style={styles.settingDisplayLabel}>Cân nặng ban đầu:</Text>
-                            <Text style={styles.settingDisplayValue}>{startWeight} kg</Text>
-                        </View>
-                        <View style={styles.settingRow}>
-                            <Text style={styles.settingDisplayLabel}>Cân nặng mục tiêu:</Text>
-                            <Text style={styles.settingDisplayValue}>{targetWeight} kg</Text>
-                        </View>
-                    </View>
-                )}
-            </View>
+                    )}
+                </View>
 
-            {/* Tips */}
-            <View style={styles.tipsCard}>
-                <Text style={styles.tipsTitle}>⚖️ Mẹo giảm cân hiệu quả</Text>
-                <Text style={styles.tipsText}>
-                    • Cân mỗi sáng sau khi đi vệ sinh{'\n'}
-                    • Ăn đủ chất, giảm calo từ từ{'\n'}
-                    • Kết hợp vận động 30 phút/ngày
-                </Text>
-            </View>
-        </ScrollView>
+                {/* Tips */}
+                <View style={styles.tipsCard}>
+                    <Text style={styles.tipsTitle}>⚖️ Mẹo giảm cân hiệu quả</Text>
+                    <Text style={styles.tipsText}>
+                        • Cân mỗi sáng sau khi đi vệ sinh{'\n'}
+                        • Ăn đủ chất, giảm calo từ từ{'\n'}
+                        • Kết hợp vận động 30 phút/ngày
+                    </Text>
+                </View>
+            </ScrollView>
+        </>
     );
 }
 

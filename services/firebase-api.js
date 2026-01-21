@@ -21,10 +21,8 @@ import {
     where,
 } from 'firebase/firestore';
 import {
-    getDownloadURL,
     getStorage,
-    ref,
-    uploadBytes
+    ref
 } from 'firebase/storage';
 import { auth, db } from '../config/firebase';
 
@@ -522,33 +520,72 @@ class FirebaseApiService {
         }
     }
 
-    async uploadProfilePicture(uri) {
+    async uploadProfilePicture(uri, options = {}) {
         const userId = this.getCurrentUserId();
         if (!userId) throw new Error('Chưa đăng nhập');
 
         try {
-            // Create a reference to Firebase Storage
-            const storage = getStorage();
-            const filename = `profile_${userId}_${Date.now()}.jpg`;
-            const storageRef = ref(storage, `profile_pictures/${filename}`);
+            // Step 1: Get old photo URL (for reference)
+            const profile = await this.getUserProfile();
+            const oldPhotoUrl = profile?.photo_url;
 
-            // Convert URI to blob
-            const response = await fetch(uri);
-            const blob = await response.blob();
+            // Step 2: Upload to Cloudinary
+            console.log('Uploading to Cloudinary...');
+            const cloudinaryService = await import('../services/cloudinary-service.js').then(m => m.default);
+            const uploadResult = await cloudinaryService.uploadProfilePicture(uri);
 
-            // Upload to Firebase Storage
-            await uploadBytes(storageRef, blob);
+            if (!uploadResult.success || !uploadResult.url) {
+                throw new Error('Upload không thành công');
+            }
 
-            // Get download URL
-            const downloadURL = await getDownloadURL(storageRef);
+            console.log('Cloudinary upload successful! URL:', uploadResult.url);
 
-            // Update user profile with new photo URL
-            await this.updateUserProfile({ photo_url: downloadURL });
+            // Step 3: Update user profile with Cloudinary URL
+            await this.updateUserProfile({ photo_url: uploadResult.url });
 
-            return { success: true, url: downloadURL };
+            return {
+                success: true,
+                url: uploadResult.url,
+                publicId: uploadResult.publicId,
+                size: uploadResult.bytes,
+            };
         } catch (error) {
             console.error('Upload error:', error);
-            throw new Error('Không thể tải ảnh lên');
+
+            // Provide specific error messages
+            if (error.message.includes('chưa được cấu hình')) {
+                throw new Error(error.message);
+            } else if (error.message.includes('Không thể kết nối')) {
+                throw new Error(error.message);
+            } else {
+                throw new Error('Không thể tải ảnh lên: ' + error.message);
+            }
+        }
+    }
+
+    async deleteImageFromStorage(imageUrl) {
+        if (!imageUrl) return;
+
+        try {
+            const storage = getStorage();
+            // Extract path from URL
+            // URL format: https://firebasestorage.googleapis.com/v0/b/[bucket]/o/[path]?...
+            const urlParts = imageUrl.split('/o/');
+            if (urlParts.length < 2) {
+                throw new Error('Invalid image URL');
+            }
+
+            const pathWithParams = urlParts[1];
+            const path = decodeURIComponent(pathWithParams.split('?')[0]);
+
+            const imageRef = ref(storage, path);
+            const { deleteObject } = await import('firebase/storage');
+            await deleteObject(imageRef);
+
+            return { success: true };
+        } catch (error) {
+            console.error('Delete error:', error);
+            throw new Error('Không thể xóa ảnh cũ');
         }
     }
 
@@ -759,73 +796,73 @@ class FirebaseApiService {
             {
                 id: 'consecutive_7',
                 title: 'Người kiên trì',
-                description: 'Đạt mục tiêu 7 ngày liên tiếp',
+                description: 'Đạt mục tiêu 4 ngày liên tiếp',
                 icon: '🏆',
                 type: 'consecutive_days',
-                target: 7,
+                target: 4,
                 points: 100
             },
             {
                 id: 'consecutive_30',
                 title: 'Siêu kiên trì',
-                description: 'Đạt mục tiêu 30 ngày liên tiếp',
+                description: 'Đạt mục tiêu 15 ngày liên tiếp',
                 icon: '👑',
                 type: 'consecutive_days',
-                target: 30,
+                target: 15,
                 points: 500
             },
             {
                 id: 'weight_loss_5',
                 title: 'Ngôi sao giảm cân',
-                description: 'Giảm được 5kg',
+                description: 'Giảm được 2.5kg',
                 icon: '⭐',
                 type: 'weight_loss',
-                target: 5,
+                target: 2.5,
                 points: 200
             },
             {
                 id: 'weight_loss_10',
                 title: 'Chuyên gia giảm cân',
-                description: 'Giảm được 10kg',
+                description: 'Giảm được 5kg',
                 icon: '🌟',
                 type: 'weight_loss',
-                target: 10,
+                target: 5,
                 points: 500
             },
             {
                 id: 'water_streak_7',
                 title: 'Chuyên gia hydrat',
-                description: 'Uống đủ nước 7 ngày liên tiếp',
+                description: 'Uống đủ nước 4 ngày liên tiếp',
                 icon: '💧',
                 type: 'water_streak',
-                target: 7,
+                target: 4,
                 points: 100
             },
             {
                 id: 'sleep_streak_14',
                 title: 'Bậc thầy giấc ngủ',
-                description: 'Ngủ đủ giác 14 ngày liên tiếp',
+                description: 'Ngủ đủ giấc 7 ngày liên tiếp',
                 icon: '🌙',
                 type: 'sleep_streak',
-                target: 14,
+                target: 7,
                 points: 200
             },
             {
                 id: 'steps_100k',
                 title: 'Người đi bộ',
-                description: 'Tổng số bước đạt 100,000',
+                description: 'Tổng số bước đạt 50,000',
                 icon: '🚶',
                 type: 'total_steps',
-                target: 100000,
+                target: 50000,
                 points: 150
             },
             {
                 id: 'activities_50',
                 title: 'Người năng động',
-                description: 'Hoàn thành 50 hoạt động',
+                description: 'Hoàn thành 25 hoạt động',
                 icon: '💪',
                 type: 'total_activities',
-                target: 50,
+                target: 25,
                 points: 150
             }
         ];
